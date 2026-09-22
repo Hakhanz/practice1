@@ -1,6 +1,6795 @@
-# practice1
-my first repository
-<br>
-Haider Ali
-<br>
-<b> Shahnawaz 
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DSU Exam Scheduler & Seating Plan</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.0/jspdf.plugin.autotable.min.js"></script>
+<style>
+:root{
+  --bg:#f5f7fb; --card:#fff; --brd:#e2e8f0; --brd2:#cbd5e1;
+  --txt:#0f172a; --mut:#64748b; --pri:#1e40af; --pri2:#1d4ed8;
+  --grn:#15803d; --red:#b91c1c; --yel:#a16207; --tl:#0f766e; --pur:#7c3aed;
+  --rad:8px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:var(--bg);color:var(--txt);font-size:13px;min-height:100vh}
+header{background:linear-gradient(135deg,#1e3a8a,#1d4ed8);color:#fff;padding:14px 22px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 4px rgba(0,0,0,.1);flex-wrap:wrap;gap:10px}
+header h1{font-size:18px;font-weight:700}
+header .sub{font-size:11px;opacity:.85}
+.tabs{background:#fff;border-bottom:1px solid var(--brd);padding:0 18px;display:flex;flex-wrap:wrap;gap:2px;position:sticky;top:0;z-index:50;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.tab{padding:11px 16px;cursor:pointer;border:none;background:transparent;font-size:13px;font-weight:500;color:var(--mut);border-bottom:3px solid transparent;transition:.15s}
+.tab:hover{color:var(--pri)}
+.tab.active{color:var(--pri);border-bottom-color:var(--pri);background:#eff6ff}
+.wrap{max-width:1400px;margin:0 auto;padding:18px}
+.panel{display:none;contain:content}
+.panel.active{display:block}
+/* GPU + skip offscreen layout/paint for heavy sections */
+.card{contain:content;content-visibility:auto;contain-intrinsic-size:1px 600px}
+/* The Seating page rebuilds its cards on every drag/park/drop. content-visibility:auto
+   defers layout for offscreen cards behind a tiny 1x600 placeholder, and resolves it
+   asynchronously in multiple passes as the browser figures out what's near the
+   viewport -- each pass shifts page height and yanks scroll position around, which is
+   what caused the repeated "jump to top" after parking/dropping a student. Seating
+   needs a stable layout more than it needs that offscreen-render optimization, so it's
+   turned off here specifically. */
+#seatingView .card, #studentParkSidebar .card{content-visibility:visible;contain:layout style;contain-intrinsic-size:auto}
+.tbl-wrap{contain:layout paint;will-change:scroll-position}
+.seat-grid{contain:layout paint;transform:translateZ(0);will-change:transform}
+.card{background:var(--card);border:1px solid var(--brd);border-radius:var(--rad);padding:16px;margin-bottom:16px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+.card h3{font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.card .desc{color:var(--mut);font-size:12px;margin-bottom:12px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn{padding:8px 14px;border:1px solid var(--pri);background:var(--pri);color:#fff;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500;display:inline-flex;align-items:center;gap:6px;transition:.15s}
+.btn:hover{background:var(--pri2)}
+.btn.ghost{background:#fff;color:var(--pri)}
+.btn.ghost:hover{background:#eff6ff}
+.btn.danger{background:var(--red);border-color:var(--red)}
+.btn.danger:hover{background:#991b1b}
+.btn.green{background:var(--grn);border-color:var(--grn)}
+.btn.sm{padding:5px 10px;font-size:12px}
+input,select,textarea{padding:6px 10px;border:1px solid var(--brd2);border-radius:5px;font-size:12px;font-family:inherit;background:#fff}
+input:focus,select:focus{outline:none;border-color:var(--pri);box-shadow:0 0 0 2px rgba(30,64,175,.15)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--brd)}
+th{background:#f8fafc;font-weight:600;font-size:11px;text-transform:uppercase;color:var(--mut);position:sticky;top:0}
+.tbl-wrap{max-height:520px;overflow:auto;border:1px solid var(--brd);border-radius:6px}
+tr:hover{background:#f8fafc}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500;background:#e0e7ff;color:#3730a3}
+.badge.red{background:#fee2e2;color:#991b1b}
+.badge.green{background:#dcfce7;color:#166534}
+.badge.gray{background:#f1f5f9;color:#475569}
+.toast{position:fixed;bottom:20px;right:20px;background:#0f172a;color:#fff;padding:12px 18px;border-radius:6px;z-index:1000;animation:slideIn .3s;max-width:340px}
+.toast.err{background:var(--red)}.toast.ok{background:var(--grn)}.toast.warn{background:var(--yel)}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:none;opacity:1}}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.stat{background:#fff;border:1px solid var(--brd);border-radius:6px;padding:12px}
+.stat .lbl{font-size:11px;color:var(--mut);text-transform:uppercase}
+.stat .val{font-size:22px;font-weight:700;margin-top:3px;color:var(--pri)}
+.seat-grid{display:grid;gap:3px;margin-top:8px;transform:translateZ(0);will-change:transform}
+.seat{aspect-ratio:1;border:1px solid var(--brd);border-radius:3px;font-size:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:1px;overflow:hidden;line-height:1.1}
+.seat.empty{background:#f8fafc;color:#cbd5e1}
+.seat.empty.drop-ready{outline:2px dashed var(--pri);background:#eff6ff;color:var(--pri)}
+.seat.manual-seat{box-shadow:inset 0 0 0 2px #7c3aed}
+.seat.just-placed{animation:seatJustPlaced 1.3s ease-out}
+@keyframes seatJustPlaced{
+  0%{box-shadow:0 0 0 3px #16a34a;}
+  65%{box-shadow:0 0 0 3px #16a34a;}
+  100%{box-shadow:0 0 0 0 rgba(22,163,74,0);}
+}
+.clash-manual-panel{border:2px solid #fecaca;background:#fff7f7}
+.clash-student-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;max-height:360px;overflow:auto}
+.clash-student-card{background:#fff;border:1px solid #fca5a5;border-left:4px solid #dc2626;border-radius:7px;padding:9px;cursor:grab;user-select:none;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.clash-student-card:active{cursor:grabbing}
+.clash-student-card .cs-name{font-weight:700;margin-bottom:3px}
+.clash-student-card .cs-meta{font-size:10.5px;color:var(--mut);margin-bottom:6px}
+.clash-course-chip{display:inline-flex;align-items:center;gap:4px;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:12px;padding:3px 7px;margin:2px;font-size:10.5px;font-weight:600}
+.clash-course-chip small{font-weight:400}
+.clash-course-chip.is-placed{background:#dcfce7;color:#166534;border-color:#86efac}
+.clash-course-chip:has(input:checked){outline:2px solid #7c3aed;outline-offset:1px}
+.placed-badge{display:inline-block;margin-left:5px;background:#16a34a;color:#fff;border-radius:8px;padding:1px 6px;font-size:9px;font-weight:700;letter-spacing:.2px}
+.clash-help{font-size:11px;color:#7f1d1d;background:#fef2f2;border:1px dashed #fca5a5;padding:7px;border-radius:6px;margin-top:8px}
+.manual-badge{display:inline-block;background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd;border-radius:10px;padding:1px 6px;font-size:8px;font-weight:700}
+.student-park-panel{border:2px solid #c4b5fd;background:#faf5ff;border-radius:7px;padding:10px;margin:10px 0 12px;transition:.15s}
+.student-park-panel.park-drop-ready{outline:2px dashed var(--pur);background:#f3e8ff}
+.subtabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--brd);padding-bottom:0}
+.subtab{padding:9px 14px;cursor:pointer;border:none;background:transparent;font-size:12.5px;font-weight:600;color:var(--mut);border-bottom:3px solid transparent;border-radius:6px 6px 0 0;transition:.15s}
+.subtab:hover{color:var(--pri);background:#f8fafc}
+.subtab.active{color:var(--pri);border-bottom-color:var(--pri);background:#eff6ff}
+.unsched-seat-card{background:#fff;border:1px solid #99f6e4;border-left:4px solid var(--tl);border-radius:7px;padding:10px 12px;margin-bottom:8px}
+.unsched-seat-card .usc-top{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px}
+.unsched-seat-card .usc-title{font-weight:700;font-size:13px}
+.unsched-seat-card .usc-meta{font-size:11px;color:var(--mut);margin-top:2px}
+.unsched-seat-card .usc-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+ .seating-layout{display:grid;grid-template-columns:minmax(245px,285px) minmax(0,1fr);gap:14px;align-items:start;overflow-anchor:none}
+ #p-seating,#studentParkSidebar,#seatingView{overflow-anchor:none}
+.student-park-sidebar{position:sticky;top:68px;max-height:calc(100vh - 84px);overflow-y:auto;z-index:20}
+.student-park-sidebar .student-park-panel{margin:0;box-shadow:0 2px 8px rgba(76,29,149,.08)}
+.student-park-session{width:100%;margin:8px 0;border-color:#a78bfa;color:#4c1d95}
+.student-park-title{display:flex;justify-content:space-between;align-items:center;gap:8px;color:#5b21b6;font-weight:700;font-size:12px}
+.student-park-help{font-size:10.5px;color:#6d28d9;margin:5px 0 8px}
+.park-list{display:flex;flex-wrap:wrap;gap:7px;min-height:34px}
+.park-student-card{background:#fff;border:1px solid #c4b5fd;border-left:4px solid #7c3aed;border-radius:6px;padding:7px 9px;min-width:190px;cursor:grab;user-select:none;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.park-student-card:active{cursor:grabbing}
+.park-select{margin-right:5px;vertical-align:middle;accent-color:#7c3aed}
+.park-student-card .park-name{font-weight:700;font-size:11.5px}
+.park-student-card .park-meta{font-size:10px;color:var(--mut);margin-top:2px}
+.park-empty{border:1px dashed #c4b5fd;border-radius:5px;color:#7c3aed;padding:8px;width:100%;font-size:10.5px;text-align:center}
+.manual-drop-slot{cursor:copy}
+.seat-col-header{font-size:9px;font-weight:700;text-align:center;padding:5px 2px;border:1px dashed var(--brd2);border-radius:4px;background:#f8fafc;color:var(--mut);cursor:grab;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;user-select:none}
+.seat-col-header:active{cursor:grabbing}
+.seat-col-header.drop-ready{outline:2px dashed var(--pri);background:#eff6ff;color:var(--pri)}
+.seat-col-header.s1{background:#dbeafe;color:#1e3a8a;border-style:solid}
+.seat-col-header.s2{background:#fef3c7;color:#92400e;border-style:solid}
+.seat-col-header.s3{background:#dcfce7;color:#166534;border-style:solid}
+.seat-col-header.s4{background:#fce7f3;color:#9d174d;border-style:solid}
+.seat-col-header.s5{background:#e0e7ff;color:#3730a3;border-style:solid}
+.seat{position:relative}
+.seat-select{position:absolute;top:2px;left:2px;margin:0;width:11px;height:11px;accent-color:#7c3aed;z-index:2}
+.seat-student-name{font-size:6.5px;font-weight:700;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:900px){.seating-layout{display:block}.student-park-sidebar{position:sticky;top:58px;max-height:none;margin-bottom:12px}}
+@media(max-width:700px){.clash-student-list{grid-template-columns:1fr}.seat{min-width:46px}}
+.seat.s1{background:#dbeafe;color:#1e3a8a}
+.seat.s2{background:#fef3c7;color:#92400e}
+.seat.s3{background:#dcfce7;color:#166534}
+.seat.s4{background:#fce7f3;color:#9d174d}
+.seat.s5{background:#e0e7ff;color:#3730a3}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+.legend .lg{padding:3px 9px;border-radius:4px;font-size:11px;font-weight:500}
+.confl{padding:10px;border-left:3px solid var(--red);background:#fef2f2;border-radius:4px;margin-bottom:6px;font-size:12px}
+.confl.warn{border-color:var(--yel);background:#fefce8}
+.empty-state{text-align:center;padding:40px;color:var(--mut)}
+.cb{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;padding:4px 8px;border-radius:5px;background:#f1f5f9}
+.cb input{margin:0}
+.chip{display:inline-block;padding:4px 11px;border-radius:14px;font-size:12px;cursor:pointer;background:#f1f5f9;border:1px solid var(--brd);font-weight:500}
+.chip.on{background:var(--red);color:#fff;border-color:var(--red)}
+.section-room{margin-bottom:18px;padding:12px;border:1px solid var(--brd);border-radius:6px;background:#fafbfc}
+.section-room h4{font-size:13px;margin-bottom:6px;color:var(--pri)}
+.group-builder{background:#f8fafc;border:1px solid var(--brd);border-radius:6px;padding:12px;margin-bottom:10px}
+.group-builder .gb-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.group-builder .gb-title{font-size:13px;font-weight:600;color:var(--pri)}
+.prog-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:12px;font-size:11px;font-weight:500;background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;cursor:pointer;margin:2px}
+.prog-pill:hover{background:#c7d2fe}
+.prog-pill.selected{background:var(--pri);color:#fff;border-color:var(--pri)}
+.prog-pill .rm{color:inherit;opacity:.7;font-weight:700;margin-left:2px}
+.room-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:12px;font-size:11px;font-weight:500;background:#fef3c7;color:#92400e;border:1px solid #fde68a;cursor:pointer;margin:2px}
+.room-pill:hover{background:#fde68a}
+.room-pill.selected{background:#b45309;color:#fff;border-color:#b45309}
+.room-pill .ord{display:inline-flex;align-items:center;justify-content:center;min-width:14px;height:14px;padding:0 3px;border-radius:50%;background:rgba(0,0,0,.18);font-size:9px;font-weight:700}
+.room-tag-dd summary{list-style:none}
+.room-tag-dd summary::-webkit-details-marker{display:none}
+.room-tag-dd[open] summary{background:#fde68a!important}
+.room-cap-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:500;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
+.room-cap-badge.warn{background:#fef3c7;color:#92400e;border-color:#fde68a}
+.room-cap-badge.over{background:#fef2f2;color:#b91c1c;border-color:#fecaca}
+.autofix-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;background:#0f766e;color:#fff;border:none;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;transition:.15s}
+.autofix-btn:hover{background:#0d9488}
+.autofix-btn.disabled{background:#94a3b8;cursor:default}
+ .dsu-date-sheet-preview{font-family:"Times New Roman",serif;background:#fff;color:#000;border:1px solid #000;padding:12px;overflow:auto}.dsu-exact-preview{padding:8px}.dsu-ref-row{font-family:Arial,sans-serif;text-align:center;font-weight:700;color:#000}.dsu-ref-title{font-size:30px;line-height:45px}.dsu-ref-exam{font-size:20px;line-height:25px}.dsu-ref-dept{font-size:20px;line-height:28px;border-bottom:1px solid #000}.dsu-ref-session{font-size:20px;line-height:28px;border-top:1px solid #000;border-bottom:1px solid #000}.dsu-reference-table tbody tr{height:30px}.dsu-reference-table tbody tr:not(.dsu-blank-row){height:135px}.dsu-reference-table tbody td,.dsu-reference-table tbody th{height:135px}.dsu-reference-table .dsu-blank-row td{height:30px;min-height:30px}.dsu-ref-signatures{display:grid;grid-template-columns:repeat(4,1fr);column-gap:10px;margin-top:0;align-items:end;font-family:"Times New Roman",serif;font-size:16px;font-weight:700}.dsu-ref-signatures span{display:block;text-align:center;border-top:1px solid #000;padding-top:6px}.dsu-ref-spacer{height:25px}.dsu-controller{text-align:center;font-family:"Times New Roman",serif;font-size:16px;font-weight:700;margin-top:0}.dsu-title,.dsu-subtitle,.dsu-dept,.dsu-session{text-align:center;font-weight:700}.dsu-title{font-size:22px}.dsu-subtitle{font-size:16px;margin-top:3px}.dsu-dept{font-size:15px;margin-top:5px}.dsu-session{font-size:14px;margin:8px 0}.dsu-date-table{width:100%;border-collapse:collapse;table-layout:fixed;font-family:"Times New Roman",serif}.dsu-date-table th,.dsu-date-table td{border:1px solid #000;color:#000;background:#fff;text-align:center;vertical-align:middle;white-space:pre-line;word-break:break-word}.dsu-date-table thead th{font-size:13px;font-weight:700;height:30px}.dsu-date-table tbody th{width:120px;font-size:13px}.dsu-date-table tbody td{font-size:10px;min-height:90px;height:90px}.dsu-signatures{display:flex;justify-content:space-between;margin-top:28px;font-family:"Times New Roman",serif;font-size:10px}.dsu-signatures span{min-width:150px;text-align:center;border-top:1px solid #000;padding-top:4px}
+@media print{.tabs,.btn,header{display:none!important}.card{box-shadow:none;border:none}}
+.flex-end{display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>DSU Exam Scheduler & Seating Plan</h1>
+    <div class="sub">Local browser app — auto-schedule, auto-seating, PDF exports</div>
+  </div>
+  <div class="row">
+    <span id="storeIndicator" class="badge gray">In memory</span>
+    <button class="btn ghost sm" onclick="exportData()">Export Data</button>
+    <button class="btn ghost sm" onclick="document.getElementById('importDataFile').click()">Import Data</button>
+    <input type="file" id="importDataFile" hidden accept=".json" onchange="importData(event)">
+    <button class="btn ghost sm" onclick="manualSave()">Save</button><button class="btn danger sm" onclick="if(confirm('Reset everything?')){location.reload()}">Reset</button>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" data-tab="data">📊 Data</button>
+  <button class="tab" data-tab="rooms">🏛️ Rooms</button>
+  <button class="tab" data-tab="sessions">⚙️ Exam Settings</button>
+  <button class="tab" data-tab="exclusions">🚫 Exclusions</button>
+  <button class="tab" data-tab="schedule">⚡ Auto Schedule</button>
+  <button class="tab" data-tab="seating">🪑 Auto Seating</button>
+  <button class="tab" data-tab="conflicts">⚠️ Conflicts</button>
+  <button class="tab" data-tab="courseclashes">📚 Course-wise Clashes</button>
+  <button class="tab" data-tab="occupancy">📈 Session Occupancy</button>
+  <button class="tab" data-tab="stuoccupancy">🧑‍🎓 Student Occupancy</button>
+  <button class="tab" data-tab="students">👥 Students</button>
+  <button class="tab" data-tab="attendance">📋 Short Attendance</button>
+  <button class="tab" data-tab="docrequired">📁 Required Documents</button>
+  <button class="tab" data-tab="exports">📄 PDF Exports</button>
+  <button class="tab" data-tab="deptsummary">🏢 Department Summary</button>
+</nav>
+
+<div class="wrap">
+
+<!-- DATA -->
+<section class="panel active" id="p-data">
+  <div class="stats">
+    <div class="stat"><div class="lbl">Courses</div><div class="val" id="stCourses">0</div></div>
+    <div class="stat"><div class="lbl">Rooms</div><div class="val" id="stRooms">0</div></div>
+    <div class="stat"><div class="lbl">Sessions</div><div class="val" id="stSessions">0</div></div>
+    <div class="stat"><div class="lbl">Students</div><div class="val" id="stStudents">0</div></div>
+    <div class="stat"><div class="lbl">Scheduled</div><div class="val" id="stSched">0</div></div>
+    <div class="stat"><div class="lbl">Conflicts</div><div class="val" id="stConfl" style="color:var(--red)">0</div></div>
+  </div>
+
+  <div class="card">
+    <h3>Import from Excel</h3>
+    <div class="desc">Upload a workbook with sheets named <b>Courses</b>, <b>Rooms</b>, <b>Students</b>. Download the template for the exact format.</div>
+    <div class="row">
+      <button class="btn ghost" onclick="downloadTemplate()">⬇ Download Template</button>
+      <input type="file" id="excelFile" accept=".xlsx,.xls,.csv" hidden onchange="handleExcel(event)">
+      <button class="btn" onclick="document.getElementById('excelFile').click()">⬆ Upload Excel</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between;margin-bottom:10px">
+      <h3>Courses (<span id="cCount">0</span>)</h3>
+      <div class="row">
+        <input id="cSearch" placeholder="Search…" oninput="debouncedRender(renderCourses)" style="width:200px">
+        <button class="btn sm" onclick="addCourse()">+ Add</button>
+      </div>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Code</th><th>Title</th><th>Program</th><th>Section</th><th>Faculty</th><th>Students</th><th>Lab</th><th>Excl.</th><th>Rooms</th><th></th></tr></thead>
+        <tbody id="coursesBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ROOMS -->
+<section class="panel" id="p-rooms">
+  <div class="card">
+    <div class="row" style="justify-content:space-between;margin-bottom:10px">
+      <h3>Rooms (<span id="rCount">0</span>)</h3>
+      <button class="btn sm" onclick="addRoom()">+ Add Room</button>
+    </div>
+    <div class="desc">Default 6×8. Edit columns/rows per room manually. Capacity auto-recalculates. Check <b>Lab</b> for rooms that are lab spaces — Auto Seating will send Lab-marked papers there and keep them out of regular exam rooms.</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Room Name</th><th style="width:80px">Cols</th><th style="width:80px">Rows</th><th style="width:90px">Capacity</th><th>Occupied</th><th>Free</th><th style="width:70px">Active</th><th style="width:60px">Lab</th><th></th></tr></thead>
+        <tbody id="roomsBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- SESSIONS -->
+<section class="panel" id="p-sessions">
+  <div class="card">
+    <h3>Exam Date Settings</h3>
+    <div class="row">
+      <label>Start Date:</label><input id="examStartDate" type="date" onchange="state.examStartDate=this.value;state.reportSemester='';state.reportYear='';save();generateSessionsFromRange();initSummaryReportControls()">
+      <label>End Date:</label><input id="examEndDate" type="date" onchange="state.examEndDate=this.value;state.reportSemester='';state.reportYear='';save();generateSessionsFromRange();initSummaryReportControls()">
+    </div>
+  </div>
+  <div class="card">
+    <h3>Report Header (used on Seating Plan / Attendance exports)</h3>
+    <div class="row" style="flex-wrap:wrap">
+      <label>University:</label><input id="uniName" value="DHA SUFFA UNIVERSITY" style="width:240px" onchange="state.uniName=this.value;save()">
+      <label>Exam Title:</label><input id="examTitle" value="END SEMESTER EXAMINATIONS" style="width:340px" onchange="state.examTitle=this.value;save()">
+      <label>Department:</label><input id="departmentName" value="Department of Management Sciences" style="width:300px" onchange="state.departmentName=this.value;save()">
+    </div>
+    <div class="desc">These two lines are printed at the top of the Course-wise Seating Plan and Room Attendance Sheet exports, exactly as on the official DSU format.</div>
+  </div>
+  <div class="card">
+    <h3>Default Students per Session</h3>
+    <div class="row">
+      <label>Cap:</label>
+      <input id="defMax" type="number" value="1800" style="width:120px" onchange="state.defaultMax=+this.value;save()">
+      <span class="desc">Used as default when adding a new session.</span>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Max Exams per Student per Day</h3>
+    <div class="row">
+      <label>Limit:</label>
+      <select id="maxExamsDay" onchange="state.maxExamsPerDay=+this.value;save()">
+        <option value="1">1 exam per day (strict)</option>
+        <option value="2" selected>2 exams per day (recommended)</option>
+        <option value="3">3 exams per day (no limit)</option>
+      </select>
+      <span class="desc">Enforced during Auto Schedule. Change this, then click <b>⚡ Auto Schedule</b> again to apply. If conflicts still show, increase sessions or lower this limit.</span>
+    </div>
+  </div>
+  <div class="card">
+    <div class="row" style="justify-content:space-between;margin-bottom:10px">
+      <div class="row"><h3>Exam Sessions (<span id="sCount">0</span>)</h3><button class="btn sm ghost" onclick="preloadSessions('two')">2 Sessions</button><button class="btn sm ghost" onclick="preloadSessions('three')">3 Sessions</button></div>
+      <button class="btn sm" onclick="addSession()">+ Add Session</button>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Label</th><th>Day</th><th>Date</th><th>Start</th><th>End</th><th>Max Students</th><th></th></tr></thead>
+        <tbody id="sessionsBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- EXCLUSIONS -->
+<section class="panel" id="p-exclusions">
+  <div class="card">
+    <h3>Excluded Programs</h3>
+    <div class="desc">MBA, MS and PhD are excluded by default. Click any program to toggle.</div>
+    <div id="programChips" class="row"></div>
+    <div class="row" style="margin-top:12px">
+      <input id="newProg" placeholder="Add program code (e.g. MPhil)">
+      <button class="btn sm ghost" onclick="addExcludeProgram()">Exclude</button>
+    </div>
+  </div>
+  <div class="card">
+    <h3><label class="cb"><input type="checkbox" id="excludeLabsCb" onchange="toggleExcludeLabs(this.checked)"> Exclude all Lab courses</label>
+      &nbsp;<button class="btn sm ghost" onclick="excludeAllLabsNow()" title="Turns the toggle on AND individually marks every detected Lab course as excluded">⚡ Exclude All Labs Now</button>
+    </h3>
+    <div class="desc">A course is auto-flagged Lab if its code or title ends with the word "Lab" (e.g. "CS102 Lab") -- detected automatically on Excel import and whenever you edit a course's code/title. Excel imports automatically turn this toggle ON. <span id="labDetectedCount">0</span> Lab course(s) detected. Toggling this also checks/unchecks each Lab course's own "Excl." box on the Data tab, so what you see there always matches. Toggle individually below.</div>
+    <div id="labList" style="max-height:280px;overflow:auto;border:1px solid var(--brd);border-radius:5px;padding:10px"></div>
+  </div>
+  <div class="card">
+    <h3>Effective Exclusions</h3>
+    <div id="effExcl" style="max-height:240px;overflow:auto;font-size:12px"></div>
+  </div>
+</section>
+
+<!-- SCHEDULE -->
+<section class="panel" id="p-schedule">
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <div><h3>Auto Scheduler</h3><div class="desc">Distributes eligible courses across sessions, avoids student & faculty clashes.</div></div>
+      <div class="row">
+        <button class="btn green" onclick="runSchedule()">⚡ Auto Schedule</button>
+        <button class="btn ghost" onclick="state.scheduled=[];save();render()">Clear</button>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>🔗 Exam Grouping Rules</h3>
+    <div class="desc">Controls which courses the Auto Scheduler is required (or prefers) to place in the <b>same session/day</b>.</div>
+    <div class="row" style="flex-direction:column;align-items:flex-start;gap:6px">
+      <label style="display:flex;gap:6px;align-items:center;font-weight:normal">
+        <input type="checkbox" id="chkMergeSections" onchange="state.mergeSectionsByCode=this.checked;save()">
+        <b>Section grouping</b> — auto-merge a course offered in two+ sections (same course code <b>or</b> the same course name) into one session, so all sections sit the exam together
+      </label>
+      <label style="display:flex;gap:6px;align-items:center;font-weight:normal">
+        <input type="checkbox" id="chkTeacherDays" onchange="state.groupTeacherDays=this.checked;save()">
+        <b>Teacher grouping</b> — prefer scheduling a teacher's other courses on a day they already have an exam, to reduce the number of separate exam days for that teacher
+      </label>
+    </div>
+  </div>
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <div><h3>📚 Course Groups (manual)</h3><div class="desc">Force any set of courses -- even different codes/programs -- into the same session (e.g. electives that must run together).</div></div>
+      <button class="btn sm" onclick="openCourseGroupBuilder()">+ New Group</button>
+    </div>
+    <div id="courseGroupsList"></div>
+  </div>
+  <div id="scheduleView"></div>
+</section>
+
+<!-- SEATING -->
+<section class="panel" id="p-seating">
+  <div class="subtabs" role="tablist">
+    <button class="subtab active" data-subtab="rooms" onclick="switchSeatingSubTab('rooms')">🪑 Seating Rooms</button>
+    <button class="subtab" data-subtab="unscheduled" onclick="switchSeatingSubTab('unscheduled')">📋 Unscheduled Papers <span id="unschedSeatingTabCount" class="badge red" style="margin-left:4px"></span></button>
+  </div>
+
+  <div id="seatingSubRooms" class="seating-subpanel">
+  <div class="card">
+    <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div><h3>Auto Seating</h3><div class="desc">Each course's students are kept together as one block. <b>A course can fill a whole column, but the same course will never occupy two consecutive columns</b> — a gap column (or a different course) is always inserted in between, so left/right neighbours never sit the same exam. Pattern: <i>Course A | Course B | Course A | Course B …</i> If only one course remains for a room, it skips a gap col then continues. Set <b>Seats per Column</b> to control how many students sit in each column, and <b>Max Courses per Room</b> to cap how many different courses can share one room in a session. <b>Drag a column's header</b> (the small labeled strip above each column) to move or swap that whole column with another column — in the same room or a different room.</div></div>
+      <div class="row" style="gap:14px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500">Seats per Column:
+          <input id="seatsPerColInput" type="number" min="1" max="50" value="8" style="width:64px"
+            onchange="state.seatsPerColumn=Math.max(1,+this.value||8);save();toast('Seats per column set to '+state.seatsPerColumn,'ok')">
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500" title="This limit applies only to automatic seating. Manual drag-and-drop can place students from any number of exams in any empty room slot.">Auto Max Courses per Room:
+          <select id="maxCoursesPerRoomInput" style="width:64px"
+            onchange="state.maxCoursesPerRoom=+this.value;save();toast('Max courses per room set to '+state.maxCoursesPerRoom,'ok')">
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4" selected>4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="99">No limit</option>
+          </select>
+        </label>
+        <button class="btn green" onclick="runSeating()">🪑 Generate Seating</button>
+        <button class="btn ghost" onclick="state.seating=[];save();render()">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Program Groups for Joint Seating (single creation point) -->
+  <div class="card" id="manualGroupsCard">
+    <h3>👥 Program Groups for Joint Seating</h3>
+    <div class="desc">Groups seat their programs together in the same room(s). Within a group, courses are interleaved column-by-column so a course never sits in two <b>consecutive</b> columns — a gap column (or a different course) always separates two blocks of the same course, while a room can still hold multiple courses side by side. Optionally pin a group to <b>specific room(s)</b> (in priority order) and set a <b>rows-per-column override</b> — otherwise it uses whichever rooms are free and the global "Seats per Column"/"Max Courses per Room" settings below. If a group has more students than its rooms hold, the overflow spills into the next available room automatically.</div>
+
+    <div style="background:#f8fafc;border:1px solid var(--brd);border-radius:6px;padding:10px;margin-bottom:12px">
+      <div style="font-size:12.5px;font-weight:600;color:var(--pri);margin-bottom:6px">➕ Create a new group</div>
+      <div class="desc" style="margin-bottom:8px">Click programs below to select them, then click <b>Create Group</b>. <b>Only eligible exam programs are shown</b> — excluded programs (MBA, MS, PhD, etc.) and lab courses are not listed.</div>
+      <div id="quickProgChips" class="row" style="gap:6px;margin-bottom:10px"></div>
+      <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
+        <input id="quickGroupName" placeholder="Group name (optional)" style="width:240px">
+        <button class="btn sm green" onclick="createGroupFromQuickPick()">+ Create Group</button>
+        <button class="btn sm ghost" onclick="quickPickSelected.clear();renderQuickProgPicker()">Clear Selection</button>
+        <span id="quickGroupHint" class="desc" style="margin-left:6px"></span>
+      </div>
+    </div>
+
+    <div id="manualGroupsList" style="margin-bottom:10px"></div>
+  </div>
+
+  <div class="seating-layout">
+    <aside id="studentParkSidebar" class="student-park-sidebar"></aside>
+    <div id="seatingView"></div>
+  </div>
+  </div>
+
+  <div id="seatingSubUnscheduled" class="seating-subpanel" style="display:none">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div><h3>📋 Unscheduled Papers — Manual Seating (<span id="unschedSeatingCount">0</span>)</h3>
+        <div class="desc">These papers have no exam session on the timetable yet. Pick a session for a paper below, then click <b>🅿️ Park</b> to send all of its students to the <b>Student Park</b> for that session. Switch to the <b>🪑 Seating Rooms</b> tab, choose the same session in the Student Park panel, and drag each parked student onto an empty seat -- exactly like clash students. Parking a paper here places its students into a room manually; it does <b>not</b> add the paper to the official timetable.</div></div>
+      </div>
+      <div id="unschedSeatingList" style="margin-top:10px"></div>
+    </div>
+  </div>
+</section>
+
+<!-- CONFLICTS -->
+<section class="panel" id="p-conflicts">
+  <div class="card">
+    <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px;align-items:flex-start">
+      <div>
+        <h3>Detected Conflicts</h3>
+        <div class="desc" style="margin-bottom:8px">Each conflict includes an <b>⚡ Auto-Fix</b> button that applies the safest resolution automatically. For room-overflow conflicts, the full <b>room capacity table</b> is shown so you can see exactly which rooms have free seats. Student/faculty clashes and daily-overloads also show manual move options below the auto-fix.</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn green" onclick="autoFixAllDailyOverloads()" title="Move courses across days so no student has 2 exams the same day">⚡ Auto-Fix All Daily Overloads</button>
+        <button class="btn" style="background:#b45309;color:#fff;border-color:#b45309" onclick="autoFixAllRoomOverflows()" title="Automatically park all overflow students across free rooms in every session">🏛️ Auto-Fix All Room Overflows</button>
+      </div>
+    </div>
+    <div id="conflictsView"></div>
+  </div>
+</section>
+
+<!-- COURSE-WISE CLASHES -->
+<section class="panel" id="p-courseclashes">
+  <div class="card">
+    <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px;align-items:flex-start">
+      <div>
+        <h3>📚 Course-wise Student Clashes</h3>
+        <div class="desc">Every pair of courses scheduled in the same session that shares students is shown here. Each clash lists the affected students and recommends the safest <b>different-day</b> move for either course.</div>
+      </div>
+      <div class="row">
+        <input id="courseClashSearch" placeholder="Search course / student…" oninput="debouncedRender(renderCourseClashes)" style="width:240px">
+        <button class="btn green" onclick="renderCourseClashes()">↻ Refresh Analysis</button>
+      </div>
+    </div>
+    <div id="courseClashStats" class="stats" style="margin-top:12px"></div>
+    <div id="courseClashesView"></div>
+  </div>
+</section>
+
+<!-- OCCUPANCY -->
+<section class="panel" id="p-occupancy">
+  <div class="card">
+    <h3>Daily Session Occupancy</h3>
+    <div id="occupancyView"></div>
+  </div>
+</section>
+
+<!-- STUDENT OCCUPANCY -->
+<section class="panel" id="p-stuoccupancy">
+  <div class="card">
+    <div class="row" style="justify-content:space-between;margin-bottom:10px">
+      <h3>Student Session Occupancy & Conflicts (<span id="stuConflCount">0</span> with conflicts)</h3>
+      <input id="stuOccSearch" placeholder="Search roll/name…" oninput="debouncedRender(renderStudentOccupancy)" style="width:240px">
+    </div>
+    <div class="desc" style="margin-bottom:8px">For each student, see which sessions they have an exam in, which sessions are <b>empty (free)</b> for them, and any same-session <b>clashes</b>. Use the ✕ next to a clashing course to unenroll the student from it.</div>
+    <div id="studentOccupancyView"></div>
+  </div>
+</section>
+
+<!-- STUDENTS -->
+<section class="panel" id="p-students">
+  <div class="card">
+    <div class="row" style="justify-content:space-between;margin-bottom:10px">
+      <h3>Students with Assigned Exams (<span id="stuCount">0</span>)</h3>
+      <input id="stuSearch" placeholder="Search…" oninput="debouncedRender(renderStudents)" style="width:240px">
+    </div>
+    <div class="tbl-wrap" style="max-height:600px">
+      <table>
+        <thead><tr><th>Roll No</th><th>Name</th><th>Program</th><th>Section</th><th>Exams</th></tr></thead>
+        <tbody id="studentsBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- SHORT OF ATTENDANCE -->
+<section class="panel" id="p-attendance">
+  <div class="card" style="border:1.5px solid #dc2626;background:#fff7f7">
+    <div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+      <div>
+        <h3>📋 Short of Attendance / Ineligible Students</h3>
+        <div class="desc">Upload the official Short Of Attendance Excel sheet. The system recognizes the attendance workbook structure, reads every worksheet, and automatically marks rows whose <b>Eligibility</b> is <b>Ineligible</b> as <b>SHORT OF ATTENDANCE</b>.</div>
+      </div>
+      <div class="row">
+        <input type="file" id="shortAttendanceFile" accept=".xlsx,.xls,.csv" hidden onchange="handleShortAttendanceExcel(event)">
+        <button class="btn danger" onclick="document.getElementById('shortAttendanceFile').click()">⬆ Upload Short Attendance Excel</button>
+        <button class="btn ghost" onclick="clearShortAttendance()">Clear Records</button>
+      </div>
+    </div>
+    <div class="stats" style="margin-top:12px">
+      <div class="stat"><div class="lbl">Short Attendance</div><div class="val" id="shortAttendanceCount">0</div></div>
+      <div class="stat"><div class="lbl">Affected Students</div><div class="val" id="shortAttendanceStudentCount">0</div></div>
+      <div class="stat"><div class="lbl">Documents Required</div><div class="val" id="shortAttendanceDocsCount">0</div></div>
+      <div class="stat"><div class="lbl">Unresolved Entries</div><div class="val" id="shortAttendanceUnresolvedCount">0</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <div><h3>Attendance Records</h3><div class="desc">You can manually mark/unmark a student-course as short of attendance. Select the documents required for the case or add a custom note.</div></div>
+      <input id="shortAttendanceSearch" placeholder="Search roll no / student / course…" oninput="debouncedRender(renderShortAttendance)" style="width:300px">
+    </div>
+    <div class="tbl-wrap" style="max-height:650px">
+      <table>
+        <thead><tr><th>Reg No.</th><th>Student</th><th>Course</th><th>Attendance %</th><th>Status</th><th>Short Attendance</th><th>Documents Required</th><th>Source</th></tr></thead>
+        <tbody id="shortAttendanceBody"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card" style="border:1.5px solid #b91c1c;background:#fffafa">
+    <div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <div>
+        <h3>📊 Program-wise Short of Attendance Report</h3>
+        <div class="desc">Each student is counted <b>once only</b> within the report, even when the student is short in multiple courses. All affected courses are listed against the same student number.</div>
+      </div>
+      <div class="row" style="gap:6px;flex-wrap:wrap">
+        <select id="shortAttendanceProgramFilter" onchange="renderShortAttendanceReport()" style="min-width:190px">
+          <option value="__ALL__">All Programs</option>
+        </select>
+        <button class="btn sm" onclick="renderShortAttendanceReport()">↻ Refresh</button>
+        <button class="btn sm" onclick="pdfShortAttendanceReport()">⬇ PDF</button>
+        <button class="btn sm" onclick="xlsxShortAttendanceReport()">⬇ Excel</button>
+      </div>
+    </div>
+    <div class="stats" style="margin-bottom:10px">
+      <div class="stat"><div class="lbl">Unique Students</div><div class="val" id="shortReportStudentCount">0</div></div>
+      <div class="stat"><div class="lbl">Programs</div><div class="val" id="shortReportProgramCount">0</div></div>
+      <div class="stat"><div class="lbl">Short Courses</div><div class="val" id="shortReportCourseCount">0</div></div>
+    </div>
+    <div id="shortAttendanceProgramReport"></div>
+  </div>
+</section>
+
+<!-- REQUIRED DOCUMENTS -->
+<section class="panel" id="p-docrequired">
+  <div class="card" style="border:1.5px solid #b45309;background:#fffbeb">
+    <div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+      <div>
+        <h3>📁 Registration Document Defaulters</h3>
+        <div class="desc">Upload the official "List of Document Defaulters" Excel sheet (Reg No., Name, HSC Board, Remarks). The system locates the real header row automatically even if there's a title/blank rows above it, matches each Reg No. to a student, and prints the Remarks (e.g. "Documents Required Not Allowed") next to that student's name on the Notice Board / Seating Plan reports.</div>
+      </div>
+      <div class="row">
+        <input type="file" id="docRequiredFile" accept=".xlsx,.xls,.csv" hidden onchange="handleDocRequiredExcel(event)">
+        <button class="btn danger" onclick="document.getElementById('docRequiredFile').click()">⬆ Upload Document Defaulters Excel</button>
+        <button class="btn ghost" onclick="clearDocRequired()">Clear Records</button>
+      </div>
+    </div>
+    <div class="stats" style="margin-top:12px">
+      <div class="stat"><div class="lbl">Records</div><div class="val" id="docRequiredCount">0</div></div>
+      <div class="stat"><div class="lbl">Affected Students</div><div class="val" id="docRequiredStudentCount">0</div></div>
+      <div class="stat"><div class="lbl">Unresolved Entries</div><div class="val" id="docRequiredUnresolvedCount">0</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <div><h3>Document Defaulter Records</h3><div class="desc">Edit the Remarks text per student if needed — whatever is here is what prints on the Notice Board / Seating Plan reports.</div></div>
+      <input id="docRequiredSearch" placeholder="Search roll no / student…" oninput="debouncedRender(renderDocRequired)" style="width:300px">
+    </div>
+    <div class="tbl-wrap" style="max-height:650px">
+      <table>
+        <thead><tr><th>Reg No.</th><th>Student</th><th>HSC Board</th><th>Remarks</th><th>Flagged</th><th>Source</th></tr></thead>
+        <tbody id="docRequiredBody"></tbody>
+      </table>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn sm" onclick="addManualDocRequired()">+ Add Manual Entry</button>
+    </div>
+  </div>
+</section>
+
+<!-- EXPORTS -->
+<section class="panel" id="p-exports">
+  <div class="card" style="border:1.5px solid var(--pri);background:#eff6ff">
+    <h3>📋 Course-wise Seating Plan (exact DSU format)</h3>
+    <div class="desc">Matches the official DHA Suffa University "SEATING PLAN" structure: University / Exam Title / SEATING PLAN header, then one Class + Course report at a time with Course Title, Session, Subject Teacher, Time, Date, followed by a S.No. / Reg No. / Name / Seating Plan (COL-x / ROW-y) / Room No. / Remarks table. <b>Room No. is printed on every student row</b>, and the PDF starts each course on a separate page. Edit the header text under <b>Exam Sessions → Report Header</b>.</div>
+    <div class="card" style="margin:12px 0;border:1px solid #94a3b8;background:#fff">
+      <h3 style="margin-bottom:6px">📅 Summary Report Controls</h3>
+      <div class="desc">Select the year, semester and department before generating the <b>Course Summary</b>, <b>Faculty Summary</b> or <b>Department Summary</b>. These values are printed at the top of every PDF and Excel report. The date range also controls which exam data is included.</div>
+      <div class="row" style="margin-top:10px;gap:12px;flex-wrap:wrap;align-items:end">
+        <label><b>Year:</b><br><input id="summaryYear" type="number" placeholder="e.g. 2026" style="min-width:100px" onchange="setSummaryReportControl('year',this.value)"></label>
+        <label><b>Semester:</b><br><select id="summarySemester" onchange="setSummaryReportControl('semester',this.value)" style="min-width:150px"><option value="Fall">Fall</option><option value="Spring">Spring</option><option value="Summer">Summer</option></select></label>
+        <label><b>Department:</b><br><select id="summaryDepartment" onchange="setSummaryReportControl('department',this.value)" style="min-width:230px"></select></label>
+        <label><b>Calendar / Report Date:</b><br><input id="summaryCalendarDate" type="date" onchange="setSummaryReportControl('calendarDate',this.value)" style="min-width:155px"></label>
+        <label><b>Data From:</b><br><input id="summaryDataFrom" type="date" onchange="setSummaryReportControl('dataFrom',this.value)" style="min-width:155px"></label>
+        <label><b>Data To:</b><br><input id="summaryDataTo" type="date" onchange="setSummaryReportControl('dataTo',this.value)" style="min-width:155px"></label>
+        <button class="btn ghost" onclick="clearSummaryReportDates()">Clear Dates</button>
+      </div>
+    </div>
+    <div class="row">
+      <button class="btn" onclick="xlsxCourseWiseSeating()">⬇ Download Excel</button>
+      <button class="btn ghost" onclick="pdfCourseWiseSeating()">⬇ Download PDF</button>
+      <button class="btn ghost" onclick="pdfAttendanceSheets()">⬇ Attendance Sheet PDF</button> <button class="btn ghost" onclick="xlsxAttendanceSheets()">⬇ Attendance Sheet Excel</button> <button class="btn ghost" onclick="pdfNoticeBoard()">⬇ Notice Board PDF</button> <button class="btn ghost" onclick="xlsxNoticeBoard()">⬇ Notice Board Excel</button> <button class="btn ghost" onclick="pdfCourseSummary()">⬇ Course Summary PDF</button> <button class="btn ghost" onclick="xlsxCourseSummary()">⬇ Course Summary Excel</button> <button class="btn ghost" onclick="pdfFacultySummary()">⬇ Faculty Summary PDF</button> <button class="btn ghost" onclick="xlsxFacultySummary()">⬇ Faculty Summary Excel</button> <button class="btn ghost" onclick="pdfDepartmentSummary()">⬇ Department Summary PDF</button> <button class="btn ghost" onclick="xlsxDepartmentSummary()">⬇ Department Summary Excel</button>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="card"><h3>Timetable — Program-wise (DSU Final Date Sheet Format)</h3><div class="desc">Reproduces the supplied Final Date Sheet structure: Final Date Sheet title row, examination title, department, session, Class / Day / Date two-row header, class rows, blank report rows and the same approval/signature positions. Choose separate program reports or merge programs that belong to the same department.</div><div class="row" style="align-items:center;gap:10px;flex-wrap:wrap"><label><b>Report Mode:</b></label><select id="timetableReportMode" onchange="state.timetableReportMode=this.value;save();renderTimetableProgramControls();previewTimetableProgram()" style="min-width:270px"><option value="separate">Separate Program Reports</option><option value="merge">Merge Selected Programs</option><option value="groups">Use Custom Program Groups</option></select></div>
+<div class="card" style="margin-top:10px;border:1px solid #cbd5e1">
+  <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap">
+    <div><b>☑ Select / Tag Programs for the Date Sheet</b><div class="desc">Tick the programs you want included. In <b>Merge Selected Programs</b>, all checked programs are combined into one department report.</div></div>
+    <div class="row"><button class="btn ghost" onclick="tagAllTimetablePrograms(true)">☑ Tick All Programs</button><button class="btn ghost" onclick="tagAllTimetablePrograms(false)">☐ Untick All</button></div>
+  </div>
+  <div id="timetableProgramTagList" style="margin-top:10px"></div>
+  <div class="row" style="margin-top:10px;align-items:center;flex-wrap:wrap">
+    <label><b>Department Name:</b></label><input id="timetableDepartmentName" value="" placeholder="e.g. Department of Management Sciences" style="min-width:320px" onchange="state.departmentName=this.value;save()">
+  </div>
+  <div id="timetableGroupBuilder" style="margin-top:12px"></div>
+</div>
+<div class="card" style="margin-top:10px;border:1px solid #cbd5e1">
+  <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap">
+    <div><b>☑ Select / Tag Courses for Date Sheet</b><div class="desc">Tick the courses you want included before generating the Program-wise report. Unticked courses will not appear in the Excel or PDF. When multiple courses fall on the same class/date cell, each course is printed as a separate block with a real horizontal border separator (not placeholder characters).</div></div>
+    <div class="row"><button class="btn ghost" onclick="tagAllTimetableCourses(true)">☑ Tick All</button><button class="btn ghost" onclick="tagAllTimetableCourses(false)">☐ Untick All</button></div>
+  </div>
+  <div id="timetableCourseTagList" style="margin-top:10px"></div>
+</div>
+<div class="row" style="margin-top:10px"><button class="btn" onclick="xlsxTimetableProgram()">⬇ Generate Excel Date Sheet</button><button class="btn ghost" onclick="pdfTimetableProgram()">⬇ Generate PDF Date Sheet</button></div></div>
+    <div class="card"><h3>Timetable — Day-wise</h3><div class="desc">All exams per day with course, faculty, time.</div><div class="row"><button class="btn" onclick="xlsxTimetableDay()">⬇ Excel</button><button class="btn ghost" onclick="pdfTimetableDay()">⬇ PDF</button></div></div>
+    <div class="card"><h3>Student Individual Timetables</h3><div class="desc">One row/page per student showing their name, roll no, all scheduled exams with date, time, room and seat number.</div><div class="row"><button class="btn" onclick="xlsxStudentPapers()">⬇ Excel</button><button class="btn ghost" onclick="pdfStudentPapers()">⬇ PDF (table)</button><button class="btn ghost" onclick="pdfStudentAdmitCards()">⬇ PDF (Admit Card — 1 page/student)</button></div></div>
+    <div class="card"><h3>Daily Class Schedule</h3><div class="desc">Per-day exam schedule with assigned rooms.</div><div class="row"><button class="btn" onclick="xlsxDaily()">⬇ Excel</button><button class="btn ghost" onclick="pdfDaily()">⬇ PDF</button></div></div>
+    <div class="card"><h3>Seating Plan (room grid)</h3><div class="desc">Room-by-room seat layout for each session, laid out as a row/column grid.</div><div class="row"><button class="btn" onclick="xlsxSeatingGrid()">⬇ Excel</button><button class="btn ghost" onclick="pdfSeating()">⬇ PDF</button></div></div>
+    <div class="card"><h3>Faculty Duty Sheet</h3><div class="desc">Faculty list per session with their courses.</div><div class="row"><button class="btn" onclick="xlsxFaculty()">⬇ Excel</button><button class="btn ghost" onclick="pdfFaculty()">⬇ PDF</button></div></div>
+  </div>
+</section>
+
+<!-- DEPARTMENT-WISE SUMMARY -->
+<section class="panel" id="p-deptsummary">
+  <div class="card" style="border:1.5px solid var(--pri);background:#eff6ff">
+    <div class="row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <div>
+        <h3>🏢 Department-wise Summary Course Report</h3>
+        <div class="desc">This report is <b>automatically linked to Timetable — Program-wise</b>. It uses the same selected programs and the same merged/custom department groups used for the DSU Final Date Sheet. There is no separate department-selection list, so the timetable remains the single source of truth.</div>
+      </div>
+      <div class="row">
+        <button class="btn green" onclick="renderDepartmentSummary()">↻ Refresh</button>
+        <button class="btn" onclick="xlsxDepartmentSummary()">⬇ Excel</button>
+        <button class="btn ghost" onclick="pdfDepartmentSummary()">⬇ PDF</button>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Current Department / Program Merging</h3>
+    <div class="desc">The groups below are read directly from <b>Timetable — Program-wise (DSU Final Date Sheet Format)</b>. Change the timetable merge/custom-group selections there and this report will immediately reflect them.</div>
+    <div id="departmentSummaryMapping" style="margin-top:10px"></div>
+  </div>
+  <div id="departmentSummaryView"></div>
+</section>
+
+</div>
+
+<script>
+/* ================= STATE ================= */
+const PRELOADED_ROOMS = [
+  {name:'GF-030', cols:6, rows:8, capacity:48},
+  {name:'GF-029', cols:6, rows:8, capacity:48},
+  {name:'GF-028', cols:6, rows:8, capacity:48},
+  {name:'FF-114', cols:6, rows:8, capacity:48},
+  {name:'FF-113', cols:6, rows:8, capacity:48},
+  {name:'FF-112', cols:6, rows:8, capacity:48},
+  {name:'FF-111', cols:6, rows:8, capacity:48},
+  {name:'FF-110', cols:6, rows:8, capacity:48},
+  {name:'FF-109', cols:6, rows:8, capacity:48},
+  {name:'FF-104', cols:6, rows:8, capacity:48},
+  {name:'FF-150', cols:6, rows:8, capacity:48},
+  {name:'FF-143', cols:6, rows:8, capacity:48},
+  {name:'FF-142', cols:6, rows:8, capacity:48},
+  {name:'FF-141', cols:6, rows:8, capacity:48},
+  {name:'SF-239', cols:6, rows:8, capacity:48},
+  {name:'SF-240', cols:6, rows:8, capacity:48},
+  {name:'SF-241', cols:6, rows:8, capacity:48},
+  {name:'FF-105', cols:6, rows:6, capacity:36},
+  {name:'FF-107', cols:6, rows:6, capacity:36},
+  {name:'FF-144', cols:5, rows:7, capacity:35},
+  {name:'FF-147', cols:5, rows:7, capacity:35},
+  {name:'SF-209', cols:5, rows:7, capacity:35},
+  {name:'FF-148', cols:5, rows:7, capacity:35},
+  {name:'SF-238', cols:6, rows:5, capacity:30},
+  {name:'FF-143 B', cols:6, rows:5, capacity:30},
+  {name:'SF-213', cols:6, rows:5, capacity:30},
+  {name:'GF-051A', cols:6, rows:5, capacity:30},
+  {name:'GF-051B', cols:6, rows:5, capacity:30},
+  {name:'SF-212', cols:6, rows:4, capacity:24},
+  {name:'SF-208', cols:6, rows:4, capacity:24},
+  {name:'FYP Lab', cols:5, rows:10, capacity:50},
+  {name:'AI Advance Lab', cols:5, rows:10, capacity:50},
+  {name:'Computer Science Lab 1', cols:5, rows:10, capacity:50},
+  {name:'Computer Science Lab 2', cols:5, rows:10, capacity:50},
+  {name:'FF-146', cols:6, rows:8, capacity:48},
+  {name:'Adv. Comp. Lab', cols:5, rows:7, capacity:35},
+  {name:'Computer Science Lab 3', cols:4, rows:8, capacity:32},
+  {name:'SE Lab I', cols:4, rows:8, capacity:32},
+  {name:'SE Lab II', cols:4, rows:8, capacity:32},
+  {name:'DS Lab I', cols:4, rows:8, capacity:32},
+  {name:'DS Lab 2', cols:4, rows:8, capacity:32},
+  {name:'AI Lab I', cols:4, rows:8, capacity:32},
+  {name:'General Purpose Lab', cols:5, rows:5, capacity:25},
+  {name:'Computing Lab', cols:5, rows:5, capacity:25},
+  {name:'CAE Center Lab', cols:4, rows:7, capacity:28},
+  {name:'CE Lab', cols:4, rows:8, capacity:32},
+  {name:'Cyber Securityr Lab', cols:4, rows:8, capacity:32},
+
+];
+const uid = () => Math.random().toString(36).slice(2,10);
+
+let state = {
+  courses: [],
+  rooms: [],
+  sessions: [],
+  students: [],
+  scheduled: [],
+  seating: [],
+  excludePrograms: ['MBA','MS','PhD','MPHIL','MPhil'],
+  excludeLabs: true,
+  defaultMax: 1800,
+  examStartDate: '',
+  examEndDate: '',
+  reportSemester: '',
+  reportYear: '',
+  reportCalendarDate: '',
+  reportDataFrom: '',
+  reportDataTo: '',
+  uniName: 'DHA SUFFA UNIVERSITY',
+  examTitle: 'END SEMESTER EXAMINATIONS',
+  departmentName: 'Department of Management Sciences',
+  timetableReportMode: 'separate',
+  timetableTaggedCourses: null, // course ids selected for Program-wise timetable report
+  timetableTaggedPrograms: null, // programs selected for merged/custom timetable reports
+  timetableProgramGroups: [], // [{id,name,department,programs:[]}] custom report groups
+  schedulingGroups: [], // manual course groups: {id, name, courseIds:[]} -- forced into the same session
+  mergeSectionsByCode: true,   // auto: courses sharing the same course code, or the same course name (different sections), always land in the same session
+  groupTeacherDays: true,      // soft: prefer putting all of one teacher's exams on the same day (different sessions ok)
+  sessionMode: 3,
+  maxExamsPerDay: 2,
+  seatsPerColumn: 8,
+  maxCoursesPerRoom: 4, // cap on distinct courses seated together in one room per session
+  manualProgramGroups: [], // [{id, name, programs:[]}]
+  manualSeatOverrides: [], // [{sessionId,roomId,row,col,studentId,courseId}]
+  parkedStudents: [], // [{sessionId,studentId,courseId}] — manual student park queue
+  shortAttendance: [], // [{studentId,courseId,regNo,courseName,attendancePercentage,eligibility,documentsRequired,documentsNote,source}]
+  docRequired: [], // [{studentId,regNo,name,hscBoard,remarks,source}] -- Registration document defaulters (e.g. "Documents Required Not Allowed")
+};
+
+function load(){
+  // Persistence disabled for large datasets to avoid storage quota errors.
+}
+
+function generateSessionsFromRange(){
+  if(!state.examStartDate || !state.examEndDate) return;
+  const start = new Date(state.examStartDate);
+  const end = new Date(state.examEndDate);
+  if(start > end) return;
+  state.sessions = [];
+  const mode = state.sessionMode || 3;
+  const times3 = [
+    {label:'Morning Session', start:'09:00', end:'11:00'},
+    {label:'Mid Session', start:'12:00', end:'14:00'},
+    {label:'Evening Session', start:'15:00', end:'17:00'}
+  ];
+  const times2 = [
+    {label:'Morning Session', start:'09:00', end:'12:00'},
+    {label:'Afternoon Session', start:'14:00', end:'17:00'}
+  ];
+  for(let d = new Date(start); d <= end; d = new Date(d.getTime()+86400000)){
+    const slots = mode===2 ? times2 : times3;
+    slots.forEach(slot => {
+      state.sessions.push({
+        id: uid(),
+        label: slot.label,
+        day: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getDay()],
+        date: d.toISOString().slice(0,10),
+        startTime: slot.start,
+        endTime: slot.end,
+        maxStudents: state.defaultMax
+      });
+    });
+  }
+  save(); safeRender();
+}
+function preloadSessions(mode='three'){ state.sessionMode = mode==='two'?2:3; if(state.examStartDate && state.examEndDate){ generateSessionsFromRange(); return; }
+  const today = state.examStartDate ? new Date(state.examStartDate) : new Date();
+  const mk=(offset,label,start,end)=>({id:uid(),label,day:['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date(today.getTime()+offset*86400000).getDay()],date:new Date(today.getTime()+offset*86400000).toISOString().slice(0,10),startTime:start,endTime:end,maxStudents:state.defaultMax});
+  state.sessions = mode==='two' ? [
+    mk(0,'Morning Session','09:00','12:00'),
+    mk(0,'Afternoon Session','14:00','17:00')
+  ] : [
+    mk(0,'Morning Session','09:00','11:00'),
+    mk(0,'Mid Session','12:00','14:00'),
+    mk(0,'Evening Session','15:00','17:00')
+  ];
+  save(); render();
+}
+function save(){
+  invalidateRosterCache();
+  if(typeof invalidateConfCache==='function') invalidateConfCache();
+  document.getElementById('storeIndicator').textContent = 'In memory';
+}
+function manualSave(){ exportData(); }
+function exportData(){
+  const blob = new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download='dsu-exam-data.json'; a.click();
+  toast('Data exported','ok');
+}
+function importData(e){
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ev => { try{ state = {...state, ...JSON.parse(ev.target.result)}; save(); render(); toast('Data imported','ok'); }catch(err){ toast('Invalid file','err'); } };
+  r.readAsText(f); e.target.value='';
+}
+
+function toast(msg, kind=''){
+  const t = document.createElement('div');
+  t.className = 'toast '+kind; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(), 2800);
+}
+
+/* ================= TABS ================= */
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  document.getElementById('p-'+b.dataset.tab).classList.add('active');
+  // Selection checkboxes always render unchecked, but _selectedDragKeys is
+  // only cleared after a *successful* park/assign. Leaving a tab with boxes
+  // still (invisibly) selected let a later, unrelated drag on another tab
+  // silently pull in that stale selection -- clear it on every tab switch.
+  if(typeof clearDragSelection==='function') clearDragSelection();
+  // Rebuild only the panel just made visible
+  if(typeof renderActive==='function') renderActive();
+});
+
+/* ============= SEATING SUB-TABS (Seating Rooms / Unscheduled Papers) ============= */
+function switchSeatingSubTab(name){
+  document.querySelectorAll('#p-seating .subtab').forEach(b=>b.classList.toggle('active', b.dataset.subtab===name));
+  const rooms = document.getElementById('seatingSubRooms');
+  const unsched = document.getElementById('seatingSubUnscheduled');
+  if(rooms) rooms.style.display = name==='unscheduled' ? 'none' : '';
+  if(unsched) unsched.style.display = name==='unscheduled' ? '' : 'none';
+  if(name==='unscheduled' && typeof renderUnscheduledSeating==='function') renderUnscheduledSeating();
+  if(name==='rooms' && typeof renderSeating==='function') renderSeating();
+}
+
+/* ================= EXCEL ================= */
+function detectProgram(code, fld){
+  const p = (fld||'').toUpperCase().trim(); if(p) return p;
+  const c = (code||'').toUpperCase();
+  if(c.startsWith('MBA')) return 'MBA';
+  if(c.startsWith('MS')) return 'MS';
+  if(c.startsWith('PHD')||c.startsWith('PH.D')) return 'PhD';
+  if(c.includes('MPHIL')||c.includes('M.PHIL')) return 'MPHIL';
+  if(c.includes('BBA')||c.includes('BAP')||c.includes('AF')) return 'BBA';
+  if(c.includes('BSCS')||c.startsWith('CS')) return 'BSCS';
+  if(c.includes('BSSE')||c.startsWith('SE')) return 'BSSE';
+  return 'OTHER';
+}
+// A course is a "Lab" course if its code or title ENDS with the word "Lab"
+// (after trimming trailing punctuation/parentheses) -- not just contains
+// "lab" anywhere, which used to misfire on titles like "Labour Economics"
+// or "Collaborative Systems". This is shared by Excel import and manual
+// course edits so the flag stays correct no matter how a course gets in.
+function isLabCourse(code, title){
+  const clean = s => String(s||'').trim().replace(/[\s\-_():.,]+$/,'').trim();
+  const endsLab = s => /\blab\.?$/i.test(clean(s));
+  return endsLab(code) || endsLab(title);
+}
+function normHeader(s){ return String(s||'').replace(/\s+/g,' ').trim().toLowerCase(); }
+// Find the actual column key in a row's keys that matches one of several
+// accepted header spellings -- exact normalized match first, then
+// "contains" as a fallback, so header casing/spacing/rewording (e.g.
+// "Reg No" vs "Registration Number", a trailing space, "Enrolment" vs
+// "Enrollment") no longer silently drops data.
+function findHeaderKey(keys, candidates){
+  for(const cand of candidates){ const hit = keys.find(k => normHeader(k)===normHeader(cand)); if(hit) return hit; }
+  for(const cand of candidates){ const hit = keys.find(k => normHeader(k).includes(normHeader(cand))); if(hit) return hit; }
+  return null;
+}
+function handleExcel(e){
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    try{
+      const wb = XLSX.read(ev.target.result, {type:'array'});
+      state.courses = [];
+      state.students = [];
+      state.rooms = [];
+      state.scheduled = [];
+      state.seating = [];
+      const studentMap = new Map();
+      const courseMap = new Map();
+      const skippedSheets = [];       // sheets we couldn't confidently identify
+      let blankCourseRows = 0;        // enrollment rows with no course code even after fill-down
+      let mergedFillCount = 0;        // blanks recovered from a merged cell above
+      let nR=0;
+      wb.SheetNames.forEach(sn => {
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], {defval:''});
+        if(!rows.length){ skippedSheets.push(`"${sn}" (empty)`); return; }
+        const keys = Object.keys(rows[0]);
+        const roomKey = findHeaderKey(keys, ['room','room name','room no','room number']);
+        const capKey  = findHeaderKey(keys, ['capacity','seats','seat capacity','room capacity']);
+        const roomTypeKey = findHeaderKey(keys, ['type','room type','category']);
+        const roomLabKey  = findHeaderKey(keys, ['lab','is lab']);
+        const regKey  = findHeaderKey(keys, ['registration number','reg number','reg no','registration no','roll no','roll number','student id']);
+        const nameKey = findHeaderKey(keys, ['student name','name']);
+        const codeKey = findHeaderKey(keys, ['course code','coursecode','code']);
+        const titleKey= findHeaderKey(keys, ['course title','title','course name']);
+        const progKey = findHeaderKey(keys, ['program','programme','degree']);
+        const facKey  = findHeaderKey(keys, ['teacher names','faculty','instructor','teacher']);
+        const secKey  = findHeaderKey(keys, ['class and section','class & section','section','class']);
+
+        const looksLikeRooms = !!(roomKey && capKey);
+        const looksLikeEnrollment = !!(regKey && codeKey);
+
+        // Decide sheet type by its ACTUAL COLUMNS, not its tab name -- a
+        // sheet named "Enrolment", "Course Data", "Master Sheet" etc. used
+        // to be skipped entirely (silently, with zero warning) because the
+        // old code only matched tab names containing "room" or
+        // "enrollment". This is the single most likely reason whole courses
+        // were missing after import.
+        if(looksLikeRooms && !looksLikeEnrollment){
+          rows.forEach(row => {
+            const name = String(row[roomKey]||'').trim();
+            const cap = +(row[capKey]||0);
+            if(!name || !cap) return;
+            const cols = cap >= 48 ? 6 : Math.max(4, Math.ceil(Math.sqrt(cap)));
+            const rws = Math.ceil(cap/cols);
+            // A room is recognized as a Lab either from a "Type" column
+            // containing the word "lab" (e.g. "Lab", "Computer Lab") or a
+            // dedicated "Lab" yes/no column -- whichever the sheet has.
+            const isLab = (roomTypeKey && /lab/i.test(String(row[roomTypeKey]||'')))
+              || (roomLabKey && /^(y|yes|true|1)$/i.test(String(row[roomLabKey]||'').trim()));
+            state.rooms.push({id:uid(), name, cols, rows:rws, capacity:cap, active:true, isLab:!!isLab});
+            nR++;
+          });
+          return;
+        }
+        if(looksLikeEnrollment){
+          // Real-world enrollment exports very often merge cells for
+          // course-level (and sometimes student-level) columns across the
+          // block of rows they apply to -- Excel only stores the value in
+          // the FIRST cell of a merge, so every row below it reads back
+          // blank. Forward-fill each tracked column from the last non-blank
+          // value above it so merged blocks don't silently lose their
+          // course code / title / program / faculty / section on rows 2+.
+          const fillKeys = [codeKey, titleKey, progKey, facKey, secKey, nameKey].filter(Boolean);
+          const lastVal = {};
+          rows.forEach(row => {
+            fillKeys.forEach(k => {
+              const v = String(row[k]||'').trim();
+              if(v) lastVal[k] = v;
+              else if(lastVal[k] !== undefined){ row[k] = lastVal[k]; mergedFillCount++; }
+            });
+          });
+          rows.forEach(row => {
+            const reg = String(row[regKey]||'').trim();
+            const name = nameKey ? String(row[nameKey]||'').trim() : '';
+            const courseCode = String(row[codeKey]||'').trim();
+            const courseTitle = titleKey ? String(row[titleKey]||'').trim() : '';
+            const program = progKey ? String(row[progKey]||'').trim() : '';
+            const faculty = facKey ? String(row[facKey]||'').trim() : '';
+            const classSection = secKey ? String(row[secKey]||'').trim() : '';
+            if(reg && !studentMap.has(reg)){
+              studentMap.set(reg, {id:uid(), rollNo:reg, name:name||reg, program, section:classSection, courseIds:[]});
+            }
+            if(courseCode){
+              const ckey = courseCode + '|' + classSection;
+              if(!courseMap.has(ckey)){
+                courseMap.set(ckey, {
+                  id:uid(), code:courseCode, title:courseTitle||courseCode, program,
+                  section:classSection, faculty, studentCount:0, isLab:isLabCourse(courseCode,courseTitle), excluded:false
+                });
+              }
+              if(reg){
+                const stu = studentMap.get(reg);
+                const course = courseMap.get(ckey);
+                if(stu && !stu.courseIds.includes(course.id)) stu.courseIds.push(course.id);
+              }
+            } else if(reg){
+              blankCourseRows++;
+            }
+          });
+          return;
+        }
+        skippedSheets.push(`"${sn}" (columns not recognized: ${keys.join(', ')})`);
+      });
+      state.students = Array.from(studentMap.values());
+      state.courses = Array.from(courseMap.values());
+      if(!state.rooms.length){ state.rooms = PRELOADED_ROOMS.map(r=>({...r,id:uid(),active:true})); }
+      state.courses.forEach(c => c.studentCount = state.students.filter(s => s.courseIds.includes(c.id)).length);
+      // Guarantee Lab courses are kept out of the exam timetable right from
+      // import, regardless of whatever this toggle was left at from a
+      // previous session -- "Exclude all Lab courses" always ends up ON
+      // after a fresh import, since eligible() (used everywhere scheduling
+      // decisions are made) checks state.excludeLabs && c.isLab.
+      const nLab = state.courses.filter(c=>c.isLab).length;
+      state.excludeLabs = true;
+      const nS = state.students.length, nC = state.courses.length;
+      save(); render();
+      toast(`Imported ${nC} courses (${nLab} Lab course${nLab===1?'':'s'} auto-excluded), ${nR} rooms, ${nS} students`,'ok');
+      // Surface anything that could explain "a course is missing" instead of
+      // leaving it silent -- skipped sheets, and enrollment rows that still
+      // had no course code even after merged-cell fill-down.
+      if(skippedSheets.length || blankCourseRows){
+        const lines = [];
+        if(skippedSheets.length) lines.push(`Sheets skipped (not recognized as Rooms or Enrollment):\n- ${skippedSheets.join('\n- ')}`);
+        if(blankCourseRows) lines.push(`${blankCourseRows} enrollment row(s) had a registration number but no course code (even after checking for a merged cell above) -- those students were added but not linked to any course.`);
+        if(mergedFillCount) lines.push(`(FYI: ${mergedFillCount} blank cell(s) were filled in from a merged cell above them -- normal for course/section columns merged across a student block.)`);
+        alert('Import completed with some rows/sheets skipped:\n\n'+lines.join('\n\n'));
+      }
+    } catch(err){
+      console.error(err);
+      toast('Excel import failed: '+err.message,'err');
+    }
+    e.target.value='';
+  };
+  r.readAsArrayBuffer(f);
+}
+function downloadTemplate(){
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
+    {'Course Code':'CS101',Title:'Intro to CS',Program:'BSCS',Section:'A',Faculty:'Dr. Khan',Students:45,Type:'Theory'},
+    {'Course Code':'CS102 Lab',Title:'Programming Lab',Program:'BSCS',Section:'A',Faculty:'Dr. Khan',Students:45,Type:'Lab'},
+  ]), 'Courses');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
+    {Name:'GF-030','Capacity':48,Cols:6,Rows:8},
+  ]), 'Rooms');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
+    {'Roll No':'BBA-001',Name:'Ali',Program:'BBA',Section:'A',Courses:'CS101'},
+  ]), 'Students');
+  XLSX.writeFile(wb, 'exam-template.xlsx');
+}
+
+/* ================= COURSES ================= */
+function addCourse(){
+  state.courses.push({id:uid(),code:'NEW',title:'New Course',program:'BSCS',section:'A',faculty:'',studentCount:0,isLab:false,excluded:false});
+  save(); renderCourses(); updateStats();
+}
+function delCourse(id){ state.courses = state.courses.filter(c=>c.id!==id); save(); renderCourses(); updateStats(); }
+function updCourse(id, k, v){
+  const c = state.courses.find(x=>x.id===id); if(!c) return;
+  if(k==='isLab'||k==='excluded') c[k] = v;
+  else if(k==='studentCount') c[k] = +v;
+  else c[k] = v;
+  // Code/title edits can turn a course into (or out of) a Lab course --
+  // keep isLab in sync automatically instead of requiring a manual toggle,
+  // so "Exclude all Lab courses" keeps catching every actual lab.
+  if(k==='code'||k==='title') c.isLab = isLabCourse(c.code, c.title);
+  // If the global "Exclude all Lab courses" switch is already on, a course
+  // that just became (or was just manually marked) a Lab course should
+  // start excluded too -- otherwise it would sit in the Data tab with
+  // "Lab" checked but "Excl." unchecked, contradicting the global switch.
+  if((k==='isLab'||k==='code'||k==='title') && c.isLab && state.excludeLabs) c.excluded = true;
+  save();
+}
+function renderCourses(){
+  const q = (document.getElementById('cSearch').value||'').toLowerCase();
+  const list = state.courses.filter(c => !q || (`${c.code} ${c.title} ${c.program} ${c.section} ${c.faculty}`).toLowerCase().includes(q));
+  document.getElementById('cCount').textContent = state.courses.length;
+  document.getElementById('coursesBody').innerHTML = list.map(c => `
+    <tr>
+      <td><input value="${esc(c.code)}" onchange="updCourse('${c.id}','code',this.value);renderCourses();updateExclusions()" style="width:90px"></td>
+      <td><input value="${esc(c.title)}" onchange="updCourse('${c.id}','title',this.value);renderCourses();updateExclusions()" style="width:180px"></td>
+      <td><input value="${esc(c.program)}" onchange="updCourse('${c.id}','program',this.value);updateExclusions()" style="width:80px"></td>
+      <td><input value="${esc(c.section)}" onchange="updCourse('${c.id}','section',this.value)" style="width:60px"></td>
+      <td><input value="${esc(c.faculty)}" onchange="updCourse('${c.id}','faculty',this.value)" style="width:130px"></td>
+      <td><input type="number" value="${c.studentCount}" onchange="updCourse('${c.id}','studentCount',this.value)" style="width:70px"></td>
+      <td><input type="checkbox" ${c.isLab?'checked':''} onchange="updCourse('${c.id}','isLab',this.checked);renderCourses();updateExclusions()"></td>
+      <td><input type="checkbox" ${c.excluded?'checked':''} onchange="updCourse('${c.id}','excluded',this.checked);updateExclusions()"></td>
+      <td style="min-width:130px">
+        <details data-course="${c.id}" class="room-tag-dd">
+          <summary style="cursor:pointer;font-size:11px;padding:3px 8px;border:1px solid var(--brd);border-radius:12px;display:inline-block;background:${(c.allowedRoomIds&&c.allowedRoomIds.length)?'#fef3c7':'#f8fafc'}" title="Restrict this course's seating to specific room(s). Leave as 'Any room' to let Auto Seating pick freely.">🏛 ${(c.allowedRoomIds&&c.allowedRoomIds.length)?c.allowedRoomIds.length+' room'+(c.allowedRoomIds.length>1?'s':''):'Any room'}</summary>
+          <div style="margin-top:4px;max-width:220px">
+            ${state.rooms.filter(r=>r.active!==false).map(r=>{
+              const sel = (c.allowedRoomIds||[]).includes(r.id);
+              return `<span class="room-pill${sel?' selected':''}" data-room="${r.id}" onclick="toggleCourseRoom('${c.id}','${r.id}')">${esc(r.name)}</span>`;
+            }).join('') || '<span class="desc">No active rooms yet -- add one in the Rooms tab.</span>'}
+          </div>
+        </details>
+      </td>
+      <td><button class="btn sm danger" onclick="delCourse('${c.id}')">×</button></td>
+    </tr>`).join('') || `<tr><td colspan="10" class="empty-state">No courses -- upload Excel or click Add.</td></tr>`;
+}
+function esc(s){ return String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+function toggleCourseRoom(courseId, roomId){
+  const c = state.courses.find(x=>x.id===courseId); if(!c) return;
+  c.allowedRoomIds = c.allowedRoomIds || [];
+  if(c.allowedRoomIds.includes(roomId)) c.allowedRoomIds = c.allowedRoomIds.filter(id=>id!==roomId);
+  else c.allowedRoomIds.push(roomId);
+  save();
+  // Update just this row's dropdown in place (instead of a full renderCourses)
+  // so the <details> panel stays open while the admin ticks several rooms.
+  const det = document.querySelector(`details[data-course="${courseId}"]`);
+  if(det){
+    const pill = det.querySelector(`.room-pill[data-room="${roomId}"]`);
+    if(pill) pill.classList.toggle('selected', c.allowedRoomIds.includes(roomId));
+    const sum = det.querySelector('summary');
+    if(sum) sum.textContent = c.allowedRoomIds.length ? `🏛 ${c.allowedRoomIds.length} room${c.allowedRoomIds.length>1?'s':''}` : '🏛 Any room';
+    sum && (sum.style.background = c.allowedRoomIds.length ? '#fef3c7' : '#f8fafc');
+  } else {
+    renderCourses();
+  }
+}
+
+/* ================= ROOMS ================= */
+function addRoom(){ state.rooms.push({id:uid(),name:'New Room',cols:6,rows:8,capacity:48,active:true,isLab:false}); save(); renderRooms(); updateStats(); }
+function delRoom(id){ state.rooms = state.rooms.filter(r=>r.id!==id); save(); renderRooms(); updateStats(); }
+function updRoom(id,k,v){
+  const r = state.rooms.find(x=>x.id===id); if(!r) return;
+  if(k==='cols'||k==='rows') { r[k]=+v; r.capacity = r.cols*r.rows; }
+  else if(k==='active'||k==='isLab') r[k]=v;
+  else r[k]=v;
+  save(); renderRooms();
+}
+function renderRooms(){
+  document.getElementById('rCount').textContent = state.rooms.length;
+  document.getElementById('roomsBody').innerHTML = state.rooms.map(r => `
+    <tr>
+      <td><input value="${esc(r.name)}" onchange="updRoom('${r.id}','name',this.value)" style="width:200px"></td>
+      <td><input type="number" value="${r.cols}" min="1" onchange="updRoom('${r.id}','cols',this.value)" style="width:70px"></td>
+      <td><input type="number" value="${r.rows}" min="1" onchange="updRoom('${r.id}','rows',this.value)" style="width:70px"></td>
+      <td><b>${roomCapacity(r)}</b></td><td>${state.seating.filter(s=>s.roomId===r.id).length}</td><td>${roomCapacity(r)-state.seating.filter(s=>s.roomId===r.id).length}</td>
+      <td><input type="checkbox" ${r.active!==false?'checked':''} onchange="updRoom('${r.id}','active',this.checked)"></td>
+      <td><input type="checkbox" title="Mark this room as a Lab -- Auto Seating will only send Lab papers here" ${r.isLab?'checked':''} onchange="updRoom('${r.id}','isLab',this.checked)"></td>
+      <td><button class="btn sm danger" onclick="delRoom('${r.id}')">×</button></td>
+    </tr>`).join('');
+}
+
+/* ================= SESSIONS ================= */
+function addSession(){
+  const count = state.sessions.length;
+  const mode = state.sessionMode || 3;
+  const baseDate = state.examStartDate ? new Date(state.examStartDate) : new Date();
+  const dayOffset = Math.floor(count / mode);
+  const sessionIndex = count % mode;
+  const d = new Date(baseDate.getTime() + dayOffset*86400000);
+  const times3 = [
+    {label:'Morning Session', start:'09:00', end:'11:00'},
+    {label:'Mid Session', start:'12:00', end:'14:00'},
+    {label:'Evening Session', start:'15:00', end:'17:00'}
+  ];
+  const times2 = [
+    {label:'Morning Session', start:'09:00', end:'12:00'},
+    {label:'Afternoon Session', start:'14:00', end:'17:00'}
+  ];
+  const slot = (mode===2?times2:times3)[sessionIndex];
+  state.sessions.push({id:uid(),label:slot.label,day:['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getDay()],date:d.toISOString().slice(0,10),startTime:slot.start,endTime:slot.end,maxStudents:state.defaultMax});
+  save(); safeRender();
+}
+function delSession(id){ state.sessions = state.sessions.filter(s=>s.id!==id); save(); safeRender(); }
+function updSess(id,k,v){
+  const s = state.sessions.find(x=>x.id===id); if(!s) return;
+  if(k==='maxStudents') s[k]=+v||0; else s[k]=v;
+  save();
+}
+function dayName(d){ if(!d) return ''; return new Date(d).toLocaleDateString('en-US',{weekday:'long'}); }
+function renderSessions(){
+  document.getElementById('sCount').textContent = state.sessions.length;
+  document.getElementById('defMax').value = state.defaultMax;
+  if(document.getElementById('maxExamsDay')) document.getElementById('maxExamsDay').value = state.maxExamsPerDay||2;
+  if(document.getElementById('examStartDate')) document.getElementById('examStartDate').value = state.examStartDate;
+  if(document.getElementById('examEndDate')) document.getElementById('examEndDate').value = state.examEndDate;
+  if(document.getElementById('uniName')) document.getElementById('uniName').value = state.uniName||'DHA SUFFA UNIVERSITY';
+  if(document.getElementById('examTitle')) document.getElementById('examTitle').value = reportExamTitle();
+  document.getElementById('sessionsBody').innerHTML = state.sessions.map(s => `
+    <tr>
+      <td><input value="${esc(s.label)}" onchange="updSess('${s.id}','label',this.value)" style="width:140px"></td>
+      <td><select onchange="updSess('${s.id}','day',this.value)" style="width:120px">
+<option value="Monday" ${s.day==='Monday'?'selected':''}>Monday</option>
+<option value="Tuesday" ${s.day==='Tuesday'?'selected':''}>Tuesday</option>
+<option value="Wednesday" ${s.day==='Wednesday'?'selected':''}>Wednesday</option>
+<option value="Thursday" ${s.day==='Thursday'?'selected':''}>Thursday</option>
+<option value="Friday" ${s.day==='Friday'?'selected':''}>Friday</option>
+<option value="Saturday" ${s.day==='Saturday'?'selected':''}>Saturday</option>
+<option value="Sunday" ${s.day==='Sunday'?'selected':''}>Sunday</option>
+</select></td>
+      <td><input type="date" value="${s.date}" onchange="updSess('${s.id}','date',this.value)"></td>
+      <td><input type="time" value="${s.startTime}" onchange="updSess('${s.id}','startTime',this.value)"></td>
+      <td><input type="time" value="${s.endTime}" onchange="updSess('${s.id}','endTime',this.value)"></td>
+      <td><input type="number" value="${s.maxStudents||''}" onchange="updSess('${s.id}','maxStudents',this.value)" style="width:90px"></td>
+      <td><button class="btn sm danger" onclick="delSession('${s.id}')">×</button></td>
+    </tr>`).join('') || `<tr><td colspan="6" class="empty-state">No sessions -- add at least one.</td></tr>`;
+}
+
+/* ================= EXCLUSIONS ================= */
+function addExcludeProgram(){
+  const v = document.getElementById('newProg').value.trim().toUpperCase();
+  if(v && !state.excludePrograms.includes(v)){ state.excludePrograms.push(v); save(); document.getElementById('newProg').value=''; updateExclusions(); }
+}
+function toggleProg(p){
+  state.excludePrograms = state.excludePrograms.includes(p) ? state.excludePrograms.filter(x=>x!==p) : [...state.excludePrograms, p];
+  save(); updateExclusions();
+}
+function toggleExcludeLabs(checked){
+  // Keep the Data tab's per-course "Excl." checkbox truthful instead of
+  // leaving it unchecked while the course is actually excluded (or vice
+  // versa) via this global switch -- flip every detected Lab course's own
+  // excluded flag along with the toggle, in both directions.
+  state.excludeLabs = checked;
+  state.courses.filter(c=>c.isLab).forEach(c=>{ c.excluded = checked; });
+  save(); updateAll();
+}
+function excludeAllLabsNow(){
+  const labs = state.courses.filter(c=>c.isLab);
+  if(!labs.length){ toast('No lab courses detected','warn'); return; }
+  labs.forEach(c=>c.excluded=true);
+  state.excludeLabs = true;
+  save(); updateAll();
+  toast(`Excluded ${labs.length} lab course${labs.length===1?'':'s'} from the timetable`,'ok');
+}
+function updateExclusions(){
+  document.getElementById('excludeLabsCb').checked = state.excludeLabs;
+  const allProgs = [...new Set([...state.courses.map(c=>c.program), ...state.excludePrograms])].sort();
+  document.getElementById('programChips').innerHTML = allProgs.map(p =>
+    `<span class="chip ${state.excludePrograms.includes(p)?'on':''}" onclick="toggleProg('${p}')">${p}</span>`).join('') || '<span class="desc">No programs yet -- import courses first.</span>';
+  const labs = state.courses.filter(c=>c.isLab);
+  const labCountEl = document.getElementById('labDetectedCount');
+  if(labCountEl) labCountEl.textContent = labs.length;
+  document.getElementById('labList').innerHTML = labs.map(c => {
+    // Effective status: excluded either via this course's own checkbox, OR
+    // because the global "Exclude all Lab courses" toggle is on -- make
+    // that visible instead of just showing an individual checkbox that
+    // might look unchecked while the course is actually excluded anyway.
+    const effectivelyExcluded = c.excluded || state.excludeLabs;
+    const statusBadge = effectivelyExcluded
+      ? `<span class="badge green" title="${c.excluded?'Individually excluded':'Excluded via the global Lab toggle above'}">✓ Excluded from timetable</span>`
+      : `<span class="badge red">In timetable</span>`;
+    return `<div class="row" style="padding:4px 0">
+      <input type="checkbox" ${c.excluded?'checked':''} onchange="updCourse('${c.id}','excluded',this.checked);updateExclusions()" title="Individually pin this course as excluded, independent of the global Lab toggle">
+      <span style="font-family:monospace;min-width:90px">${esc(c.code)}</span>
+      <span class="desc" style="flex:1">${esc(c.title)} (${esc(c.program)} ${esc(c.section)})</span>
+      ${statusBadge}
+    </div>`;
+  }).join('') || '<span class="desc">No lab courses found.</span>';
+  const eff = state.courses.filter(c => c.excluded || (state.excludeLabs && c.isLab) || state.excludePrograms.includes(c.program));
+  document.getElementById('effExcl').innerHTML = eff.map(c =>
+    `<div style="padding:4px 0;border-bottom:1px solid var(--brd)">
+      <span style="font-family:monospace">${esc(c.code)}</span> -- ${esc(c.title)}
+      <span class="badge red" style="margin-left:8px">${esc(c.program)} ${esc(c.section)}</span>
+    </div>`).join('') || '<div class="desc">Nothing excluded.</div>';
+}
+
+/* ================= ELIGIBLE ================= */
+function eligible(){
+  return state.courses.filter(c => !c.excluded && !(state.excludeLabs && c.isLab) && !state.excludePrograms.includes(c.program));
+}
+// Memoized roster index — built once per data change, O(1) lookups.
+let _studentsByCourse = null;
+function buildStudentIndex(){
+  const m = new Map();
+  for(const st of state.students){
+    const ids = st.courseIds||[];
+    for(let i=0;i<ids.length;i++){
+      const cid = ids[i];
+      let arr = m.get(cid); if(!arr){ arr=[]; m.set(cid,arr); }
+      arr.push(st.id);
+    }
+  }
+  _studentsByCourse = m;
+}
+function studentsOf(cid){
+  if(!_studentsByCourse) buildStudentIndex();
+  return _studentsByCourse.get(cid) || [];
+}
+function invalidateRosterCache(){ _studentsByCourse = null; }
+function roomCapacity(room){ return Math.max(0, +(room?.capacity || room?.cols * room?.rows || 0)); }
+
+/* ================= AUTO SCHEDULE ================= */
+// Builds the "scheduling units" that the auto-scheduler treats as one
+// indivisible block -- every course inside a unit ALWAYS lands in the same
+// session, together:
+//   • Section grouping  (state.mergeSectionsByCode): any courses sharing the
+//     same course code, OR the same course name/title -- i.e. the same paper
+//     offered as separate sections, sometimes entered under slightly
+//     different codes -- are merged automatically. This is what makes
+//     "Course X, Section A" and "Course X, Section B" sit their exam on the
+//     same day/session even if one section's code was typed differently.
+//   • Course grouping   (state.schedulingGroups): admin-defined groups of any
+//     courses (different codes, different programs -- e.g. electives that must
+//     run at the same time) are merged the same way.
+//   • Teacher grouping   isn't a hard merge (a teacher obviously can't be
+//     in two rooms at the exact same time) -- instead it's a soft placement
+//     preference (state.groupTeacherDays) that tries to land a teacher's other
+//     courses on a day they're *already* examining, so they need fewer separate
+//     exam days on campus. See scoreChoice()/targetScoreUnit() below.
+function buildSchedulingUnits(courseList, enrollMap){
+  const parent = new Map();
+  courseList.forEach(c => parent.set(c.id, c.id));
+  function find(x){ let r = x; while(parent.get(r) !== r) r = parent.get(r); parent.set(x, r); return r; }
+  function union(a, b){ const ra = find(a), rb = find(b); if(ra !== rb) parent.set(ra, rb); }
+
+  if(state.mergeSectionsByCode){
+    const byCode = new Map();
+    const byTitle = new Map();
+    courseList.forEach(c => {
+      const codeKey = String(c.code || '').trim().toUpperCase();
+      if(codeKey){
+        if(byCode.has(codeKey)) union(c.id, byCode.get(codeKey));
+        else byCode.set(codeKey, c.id);
+      }
+      // Same course name/title also counts as the same paper, even when the
+      // code differs between sections (e.g. a typo or a section-specific code).
+      const titleKey = String(c.title || '').trim().toUpperCase();
+      if(titleKey){
+        if(byTitle.has(titleKey)) union(c.id, byTitle.get(titleKey));
+        else byTitle.set(titleKey, c.id);
+      }
+    });
+  }
+  (state.schedulingGroups || []).forEach(g => {
+    const ids = (g.courseIds || []).filter(id => parent.has(id));
+    for(let i=1; i<ids.length; i++) union(ids[0], ids[i]);
+  });
+
+  const buckets = new Map();
+  courseList.forEach(c => {
+    const r = find(c.id);
+    if(!buckets.has(r)) buckets.set(r, []);
+    buckets.get(r).push(c);
+  });
+
+  return [...buckets.values()].map(courses => {
+    const studentIds = new Set();
+    let noRosterCost = 0;
+    courses.forEach(c => {
+      const set = enrollMap.get(c.id);
+      if(set && set.size > 0) set.forEach(sid => studentIds.add(sid));
+      else noRosterCost += (c.studentCount || 0);
+    });
+    const faculties = [...new Set(courses.map(c => c.faculty).filter(Boolean))];
+    return {
+      id: courses.map(c => c.id).join('+'),
+      courses, studentIds, faculties,
+      seatCost: studentIds.size + noRosterCost,
+      grouped: courses.length > 1
+    };
+  });
+}
+function runSchedule(){
+  if(!state.sessions.length){ toast('Add at least one session','err'); return; }
+  const totalCap = state.rooms.filter(r=>r.active!==false).reduce((n,r)=>n+roomCapacity(r),0);
+  if(!totalCap){ toast('No active rooms available','err'); return; }
+
+  // Build enrollment map: courseId -> Set<studentId>
+  const enrollMap = new Map();
+  state.students.forEach(st => (st.courseIds||[]).forEach(cid => {
+    if(!enrollMap.has(cid)) enrollMap.set(cid, new Set());
+    enrollMap.get(cid).add(st.id);
+  }));
+
+  // Per-student daily cap: 1 exam/day unless student has 7+ total exams (then relaxed)
+  const studentCourseCount = new Map();
+  state.students.forEach(st => studentCourseCount.set(st.id, (st.courseIds||[]).length));
+  // Hard rule: 1 exam/day. Only students with 7+ total exams may have 2/day (never more).
+  const dayCapFor = (sid) => (studentCourseCount.get(sid) || 0) >= 7 ? 2 : 1;
+
+  // sessionData: sessId -> {date, cap, used, students, faculty}
+  const sessionData = new Map();
+  state.sessions.forEach(s => sessionData.set(s.id, {
+    id: s.id, date: s.date,
+    cap: totalCap,
+    used: 0,
+    students: new Set(),
+    faculty: new Set()
+  }));
+
+  // Per-date per-student exam count tracker
+  const studentDayCount = new Map();
+  const getDC = (sid, date) => studentDayCount.get(sid+'|'+date) || 0;
+  const incDC = (sid, date) => studentDayCount.set(sid+'|'+date, getDC(sid,date)+1);
+
+  // Per-date per-teacher tracker -- backs the "teacher grouping" soft preference
+  const teacherDates = new Map(); // faculty name -> Set<date>
+  const addTeacherDate = (fac, date) => { if(!fac) return; if(!teacherDates.has(fac)) teacherDates.set(fac, new Set()); teacherDates.get(fac).add(date); };
+
+  const assignments = [];
+
+  const eligibleList = eligible();
+  const units = buildSchedulingUnits(eligibleList, enrollMap);
+  const unitByCourse = new Map();
+  units.forEach(u => u.courses.forEach(c => unitByCourse.set(c.id, u)));
+
+  // Check if a unit (one course, or several merged courses/sections) can be
+  // placed in a session. relaxDaily=true: ignore daily exam limit but STILL
+  // prevent same-session student clash. relaxDaily=false: enforce both.
+  function canPlace(unit, sessId, relaxDaily) {
+    const sd = sessionData.get(sessId);
+    if(sd.used + unit.seatCost > sd.cap) return false;
+    // Faculty clash always blocked -- a teacher can never sit two exams at once,
+    // even inside a merged group (the group's own courses are placed atomically
+    // so this only ever fires against a DIFFERENT unit already in the session).
+    for(const f of unit.faculties){ if(sd.faculty.has(f)) return false; }
+    for(const sid of unit.studentIds){
+      if(sd.students.has(sid)) return false; // same-session clash -- NEVER allowed
+      if(!relaxDaily && getDC(sid, sd.date) >= dayCapFor(sid)) return false;
+    }
+    return true;
+  }
+
+  function place(unit, sessId) {
+    const sd = sessionData.get(sessId);
+    unit.courses.forEach(c => assignments.push({id: uid(), sessionId: sessId, courseId: c.id}));
+    unit.faculties.forEach(f => { sd.faculty.add(f); addTeacherDate(f, sd.date); });
+    unit.studentIds.forEach(sid => { sd.students.add(sid); incDC(sid, sd.date); });
+    sd.used += unit.seatCost;
+  }
+
+  function rebuildTrackers(){
+    sessionData.forEach(sd => { sd.used = 0; sd.students.clear(); sd.faculty.clear(); });
+    studentDayCount.clear();
+    teacherDates.clear();
+    const seenUnitSession = new Set();
+    for(const a of assignments){
+      const unit = unitByCourse.get(a.courseId);
+      const sd = sessionData.get(a.sessionId);
+      if(!unit || !sd) continue;
+      const key = unit.id+'|'+a.sessionId;
+      if(seenUnitSession.has(key)) continue; // count a merged unit's cost/faculty/students only once
+      seenUnitSession.add(key);
+      sd.used += unit.seatCost;
+      unit.faculties.forEach(f => { sd.faculty.add(f); addTeacherDate(f, sd.date); });
+      unit.studentIds.forEach(sid => { sd.students.add(sid); incDC(sid, sd.date); });
+    }
+  }
+
+  // Moves an ENTIRE unit (all its courses/sections together) to a new session.
+  function moveUnit(unit, newSessId){
+    let moved = false;
+    assignments.forEach(a => { if(unit.courses.some(c=>c.id===a.courseId)){ a.sessionId = newSessId; moved = true; } });
+    if(moved) rebuildTrackers();
+    return moved;
+  }
+
+  // Score a candidate session: lower = better.
+  // Primary: max daily-exam count among this unit's students on that date (spreads across days).
+  // Secondary: session.used (spreads across sessions).
+  // Teacher-grouping bonus: if ANY teacher in this unit already has an exam on
+  // that date, prefer it -- consolidates a teacher's papers onto fewer days.
+  function scoreChoice(unit, sessId){
+    const sd = sessionData.get(sessId);
+    let maxLoad = 0;
+    for(const sid of unit.studentIds){
+      const c = getDC(sid, sd.date);
+      if(c > maxLoad) maxLoad = c;
+    }
+    let score = maxLoad * 100000 + sd.used;
+    if(state.groupTeacherDays && unit.faculties.some(f => teacherDates.get(f)?.has(sd.date))) score -= 50000;
+    return score;
+  }
+
+  // Sort largest first for best packing
+  const sortedUnits = units.slice().sort((a,b) => b.seatCost - a.seatCost);
+
+  sortedUnits.forEach(unit => {
+    // Pass 1: strict -- no clashes, no faculty conflict, respect daily limit
+    let choices = state.sessions.map(s=>s.id).filter(id => canPlace(unit, id, false));
+    choices.sort((a,b) => scoreChoice(unit,a) - scoreChoice(unit,b));
+
+    if(!choices.length){
+      // Pass 2: relax daily limit only (student session-clash still blocked)
+      choices = state.sessions.map(s=>s.id).filter(id => canPlace(unit, id, true));
+      choices.sort((a,b) => scoreChoice(unit,a) - scoreChoice(unit,b));
+    }
+    if(choices.length) place(unit, choices[0]);
+  });
+
+  // Repair pass: if greedy placement left same-day overloads while other rooms/sessions
+  // still have capacity, move the offending units to the safest open session first.
+  // Whole units move together, so a merged section/course/teacher group never splits apart.
+  function overloadedCourseScores(){
+    const dayMap = new Map();
+    for(const a of assignments){
+      const unit = unitByCourse.get(a.courseId), sess = state.sessions.find(s=>s.id===a.sessionId);
+      if(!unit || !sess) continue;
+      unit.studentIds.forEach(sid=>{
+        const k = sid+'|'+sess.date;
+        if(!dayMap.has(k)) dayMap.set(k,{sid, courseIds:[]});
+        dayMap.get(k).courseIds.push(a.courseId);
+      });
+    }
+    const score = new Map();
+    dayMap.forEach(e=>{
+      if(e.courseIds.length > dayCapFor(e.sid)) e.courseIds.forEach(cid=>score.set(cid,(score.get(cid)||0)+1));
+    });
+    return [...score.entries()].sort((a,b)=>b[1]-a[1]).map(e=>e[0]);
+  }
+  function canMoveUnit(unit, targetSessId){
+    const a0 = assignments.find(x => unit.courses.some(c=>c.id===x.courseId));
+    if(!a0 || a0.sessionId === targetSessId) return false;
+    const curSess = state.sessions.find(s=>s.id===a0.sessionId), targetSess = state.sessions.find(s=>s.id===targetSessId), target = sessionData.get(targetSessId);
+    if(!curSess || !targetSess || !target) return false;
+    if(targetSess.date === curSess.date) return false;
+    if(target.used + unit.seatCost > target.cap) return false;
+    for(const f of unit.faculties){ if(target.faculty.has(f)) return false; }
+    for(const sid of unit.studentIds){
+      if(target.students.has(sid)) return false;
+      if(getDC(sid, target.date) + 1 > dayCapFor(sid)) return false;
+    }
+    return true;
+  }
+  function targetScoreUnit(unit, sessId){
+    const sd = sessionData.get(sessId);
+    let maxLoad = 0;
+    for(const sid of unit.studentIds){ maxLoad = Math.max(maxLoad, getDC(sid, sd.date)); }
+    let score = maxLoad * 100000 + sd.used;
+    if(state.groupTeacherDays && unit.faculties.some(f => teacherDates.get(f)?.has(sd.date))) score -= 50000;
+    return score;
+  }
+  for(let pass=0; pass<20; pass++){
+    const offenders = overloadedCourseScores();
+    if(!offenders.length) break;
+    let progressed = false;
+    for(const cid of offenders){
+      const unit = unitByCourse.get(cid); if(!unit) continue;
+      const targets = state.sessions.map(s=>s.id).filter(id=>canMoveUnit(unit,id)).sort((a,b)=>targetScoreUnit(unit,a)-targetScoreUnit(unit,b));
+      if(targets.length){ moveUnit(unit, targets[0]); progressed = true; break; }
+    }
+    if(!progressed) break;
+  }
+
+  state.scheduled = assignments;
+  save(); safeRender();
+  const unplaced = eligibleList.length - assignments.length;
+  const mergedUnits = units.filter(u=>u.grouped);
+  const groupNote = mergedUnits.length
+    ? ` — ${mergedUnits.length} group(s) merged into one session (${mergedUnits.reduce((n,u)=>n+u.courses.length,0)} course rows kept together)`
+    : '';
+  toast(
+    'Scheduled ' + assignments.length + ' exams across ' + state.sessions.length + ' sessions' + groupNote +
+    (unplaced ? ' ('+unplaced+' could not fit -- add more sessions)' : ''),
+    unplaced ? 'warn' : 'ok'
+  );
+}
+
+/* ================= AUTO SEATING ================= */
+
+/*  SEATING RULE (applied everywhere):
+    ─────────────────────────────────────────────────
+    • Students that share the SAME roll-number series (e.g. BBA251xxx)
+      sit in the SAME room.
+    • Between two consecutive columns of the SAME series, ONE empty
+      gap column is always inserted so that no neighbour on the left
+      or right shares the same exam paper.
+    • Students from a DIFFERENT batch/series fill column 2 (and 4, 6 …)
+      — i.e. they are interleaved in the gap column whenever possible.
+    • Pattern example (3 series A, B, C):
+        Col 1: A  Col 2: B  Col 3: A  Col 4: B  Col 5: C …
+      If only A remains and A was just placed, skip one col then A again:
+        Col 1: A  Col 2: [gap]  Col 3: A …
+    ─────────────────────────────────────────────────  */
+
+// Extract roll-number series prefix (e.g. "BBA251001" -> "BBA251", "22F-BSCS-001" -> "22F-BSCS-")
+function rollSeries(rollNo){
+  const s = String(rollNo||'');
+  // DSU style: letters + 3-digit term code, e.g. BBA251, BSCS252
+  const dsu = s.match(/^([A-Za-z]+\d{3})/);
+  if(dsu) return dsu[1].toUpperCase();
+  // Dash-separated style: keep everything up to last dash before trailing digits
+  const dash = s.match(/^(.*[-_])[0-9]+$/);
+  if(dash) return dash[1].toUpperCase();
+  return s.replace(/[0-9]+$/,'').toUpperCase() || s.toUpperCase();
+}
+
+// Extract term code (e.g. "251" from BBA251001 / 251002 / BBA-251-001).
+function termCode(rollNo){
+  const s = String(rollNo||'');
+  const m = s.match(/(\d{3})/);
+  return m ? m[1] : '';
+}
+
+/* Core column-assignment engine.
+   strips      : [{series, students:[], offset}]  (sorted largest-first)
+                 "series" is the adjacency key -- one course's students are always
+                 kept inside a single strip (never mixed with another course), so
+                 the same-series rule below also means "same course".
+   room        : room object  (.cols, .rows)
+   seatsPerCol : seats per column
+   startCol    : first column index to write into (default 1; pass higher when
+                 a room is already partially filled by another bucket)
+   courseCap   : optional {set:Set(courseId already in this room), max:Number}.
+                 Once `set.size` reaches `max`, no NEW course is admitted into this
+                 room -- only courses already in the set may keep filling columns.
+   Returns     : { placed: [{col,row,studentId,courseId}], nextCol: number, capped: bool }
+                 gap columns produce no entries (rendered as dashed separators).
+                 capped=true means the room was stopped early by the course cap and
+                 the caller should move on to the next room even if columns remain. */
+function assignColumnsInRoom(strips, room, seatsPerCol, startCol, courseCap){
+  const placed = [];
+  let col = startCol || 1;
+  let prevSeries = null;
+  let capped = false;
+  const cap = courseCap || null;
+
+  while(col <= room.cols){
+    let remaining = strips.filter(s => s.offset < s.students.length);
+    if(!remaining.length) break;
+
+    // Enforce the per-room "max distinct courses" cap: a strip whose course isn't
+    // already admitted into this room can only be picked while there's still room
+    // under the cap. Strips already admitted are always allowed to keep filling.
+    if(cap){
+      const allowed = remaining.filter(s => cap.set.has(s.courseId) || cap.set.size < cap.max);
+      if(!allowed.length){ capped = true; break; }
+      remaining = allowed;
+    }
+
+    // Prefer a strip whose course differs from the previous filled column --
+    // this guarantees the SAME course never occupies two consecutive columns
+    // WHEN an alternative course is actually available to alternate with.
+    // If every remaining strip belongs to a single course (no alternative
+    // exists), fill straight through instead of inserting an empty "gap"
+    // column -- a gap has zero anti-cheating benefit in that case and would
+    // only waste seats, which full room utilization can't afford.
+    const distinctCourses = new Set(remaining.map(s => s.courseId));
+    let pick;
+    if(distinctCourses.size > 1){
+      pick = remaining
+        .filter(s => s.series !== prevSeries)
+        .sort((a,b) => (b.students.length - b.offset) - (a.students.length - a.offset))[0];
+    }
+    if(!pick){
+      pick = remaining
+        .sort((a,b) => (b.students.length - b.offset) - (a.students.length - a.offset))[0];
+    }
+
+    if(cap) cap.set.add(pick.courseId);
+    const rowsHere = Math.min(seatsPerCol, room.rows);
+    for(let row = 1; row <= rowsHere; row++){
+      if(pick.offset >= pick.students.length) break;
+      const stu = pick.students[pick.offset++];
+      placed.push({ col, row, studentId: stu.studentId, courseId: stu.courseId });
+    }
+    prevSeries = pick.series;
+    col++;
+  }
+  return { placed, nextCol: col, capped };
+}
+
+function runSeating(onlyGrouped){
+  if(!state.scheduled.length){ toast('Run Auto Schedule first','err'); return; }
+
+  const activeRooms = state.rooms.filter(r=>r.active!==false)
+    .sort((a,b) => roomCapacity(b) - roomCapacity(a));
+  if(!activeRooms.length){ toast('No active rooms available','err'); return; }
+
+  const seating = [];
+  const studentById = new Map(state.students.map(s=>[s.id,s]));
+  const courseById  = new Map(state.courses.map(c=>[c.id,c]));
+  const scheduledBySession = new Map();
+  state.scheduled.forEach(sc=>{
+    if(!scheduledBySession.has(sc.sessionId)) scheduledBySession.set(sc.sessionId,[]);
+    scheduledBySession.get(sc.sessionId).push(sc);
+  });
+
+  const manualGroups = (state.manualProgramGroups||[]).filter(g=>g.programs&&g.programs.length>=1);
+  const seatsPerCol = state.seatsPerColumn || 8;
+  let pinnedOverflowCount = 0;
+  let roomTagOverflowCount = 0;
+  let noLabRoomCount = 0;
+  const allGroupedCourseIds = new Set(); // accumulated across sessions, used for onlyGrouped totals
+
+  for(const sess of state.sessions){
+    const sessExams = scheduledBySession.get(sess.id)||[];
+    if(!sessExams.length) continue;
+
+    // Helper: build strips from a list of courseIds.
+    // One strip per COURSE (not per roll-series) -- this keeps every course's
+    // students together as a single block and means the adjacency rule in
+    // assignColumnsInRoom ("never the same series in two consecutive columns")
+    // is enforced per COURSE: a course can fill one column, but the very next
+    // column is guaranteed to be a different course (or a gap), never the same
+    // course again. Students within a course strip are still sorted by roll
+    // number so batches/series stay ordered within their own block.
+    function buildStrips(courseIds){
+      const strips = [];
+      courseIds.forEach(cid=>{
+        const c = courseById.get(cid); if(!c) return;
+        const ids = studentsOf(c.id);
+        const arr = ids.length
+          ? ids.map(id=>{ const st=studentById.get(id); return {studentId:id, rollNo:st?st.rollNo:id, courseId:c.id}; })
+          : Array.from({length:c.studentCount||0}).map((_,i)=>({studentId:`${c.id}-${i}`, rollNo:`${c.code}-${String(i).padStart(4,'0')}`, courseId:c.id}));
+        if(!arr.length) return;
+        arr.sort((a,b)=>a.rollNo.localeCompare(b.rollNo));
+        strips.push({ series: c.id, courseId: c.id, students: arr, offset:0 });
+      });
+      return strips.sort((a,b)=>b.students.length-a.students.length);
+    }
+
+    // Per-room cap of distinct courses for this session -- shared across every
+    // group and the ungrouped placement so the total never exceeds the limit.
+    const roomCourseSets = new Map(); // roomId -> Set(courseId)
+    const courseCapMax = state.maxCoursesPerRoom || 4;
+    function capFor(room){
+      if(!roomCourseSets.has(room.id)) roomCourseSets.set(room.id, new Set());
+      return { set: roomCourseSets.get(room.id), max: courseCapMax };
+    }
+
+    // Helper: place strips into a given ordered list of rooms, starting at roomIdx/colCursor,
+    // using a given seats-per-column value (falls back to the global default).
+    // Respects the per-room "max distinct courses" cap: once a room hits the cap,
+    // remaining strips move on to the next room even if columns are still free.
+    function placeStripsInto(strips, roomList, roomIdx, colCursor, seatsPerColForThis){
+      const remaining = () => strips.reduce((n,s)=>n+(s.students.length-s.offset),0);
+      while(remaining() > 0 && roomIdx < roomList.length){
+        const room = roomList[roomIdx];
+        if(colCursor > room.cols){ roomIdx++; colCursor=1; continue; }
+        const { placed, nextCol, capped } = assignColumnsInRoom(strips, room, seatsPerColForThis, colCursor, capFor(room));
+        placed.forEach(p=> seating.push({sessionId:sess.id, roomId:room.id, ...p}));
+        if(nextCol > room.cols || placed.length===0 || capped){ roomIdx++; colCursor=1; }
+        else colCursor = nextCol;
+      }
+      return { roomIdx, colCursor, leftover: remaining() };
+    }
+    // Backwards-compatible wrapper against the shared/default room pool
+    function placeStrips(strips, roomIdx, colCursor){
+      return placeStripsInto(strips, sharedRooms, roomIdx, colCursor, seatsPerCol);
+    }
+
+    // Rooms pinned to a specific group are pulled out of the shared pool so they are
+    // never double-booked by other groups or the ungrouped/default placement.
+    const dedicatedRoomIds = new Set(
+      manualGroups.filter(g=>g.roomIds&&g.roomIds.length).flatMap(g=>g.roomIds)
+    );
+    // Lab-marked rooms are reserved for Lab papers only, so the shared pool
+    // used for ordinary (non-Lab) courses never eats into them.
+    const sharedRooms = activeRooms.filter(r=>!dedicatedRoomIds.has(r.id) && !r.isLab);
+    const sharedLabRooms = activeRooms.filter(r=>!dedicatedRoomIds.has(r.id) && r.isLab);
+
+    // Collect courseIds for each manual group that has courses in this session
+    const groupedCourseIds = new Set();
+    let roomIdx = 0, colCursor = 1;
+    let labRoomIdx = 0, labColCursor = 1;
+    let spilloverWarned = false;
+
+    for(const g of manualGroups){
+      const gCourseIds = sessExams
+        .map(ex=>ex.courseId)
+        .filter(cid=>{ const c=courseById.get(cid); return c && g.programs.includes(c.program); });
+      if(!gCourseIds.length) continue;
+
+      gCourseIds.forEach(cid=>{ groupedCourseIds.add(cid); allGroupedCourseIds.add(cid); });
+      const strips = buildStrips(gCourseIds);
+      if(!strips.length) continue;
+
+      const groupSeatsPerCol = g.rowsPerCol || seatsPerCol;
+      // Fill the group's own largest pinned room to capacity before moving to
+      // its next pinned room (same max-capacity-first rule as the shared pool).
+      const pinnedRooms = (g.roomIds||[]).map(id=>activeRooms.find(r=>r.id===id)).filter(Boolean)
+        .sort((a,b)=>roomCapacity(b)-roomCapacity(a));
+
+      if(pinnedRooms.length){
+        // Fill this group's own dedicated room(s) first, in the order they were selected
+        const res = placeStripsInto(strips, pinnedRooms, 0, 1, groupSeatsPerCol);
+        // Any overflow that doesn't fit in the pinned room(s) spills into the shared pool
+        if(res.leftover > 0){
+          const res2 = placeStripsInto(strips, sharedRooms, roomIdx, colCursor, groupSeatsPerCol);
+          roomIdx = res2.roomIdx; colCursor = res2.colCursor;
+          spilloverWarned = true;
+          pinnedOverflowCount++;
+        }
+      } else {
+        // No pinned rooms — keep packing into the current room's remaining
+        // columns instead of jumping to a fresh room, so no partially-filled
+        // room is left behind with unused capacity.
+        const result = placeStrips(strips, roomIdx, colCursor);
+        roomIdx = result.roomIdx; colCursor = result.colCursor;
+      }
+    }
+
+    // Seat all remaining (ungrouped) programs in the remaining shared rooms —
+    // skipped entirely when onlyGrouped is true (Apply All Groups & Re-Seat),
+    // so only students belonging to a manual group get seated.
+    if(!onlyGrouped){
+      const ungroupedCourseIds = sessExams.map(ex=>ex.courseId).filter(cid=>!groupedCourseIds.has(cid));
+      if(ungroupedCourseIds.length){
+        // Courses individually tagged (in the Data tab) to specific rooms are
+        // pinned there first -- independent of manual groups and Lab routing.
+        // Courses that share the exact same room selection are seated
+        // together, filling their tagged room(s) largest-first, same as a
+        // manual group's pinned rooms; any overflow spills into the shared pool.
+        const roomTaggedIds = ungroupedCourseIds.filter(cid=>{ const c=courseById.get(cid); return c && c.allowedRoomIds && c.allowedRoomIds.length; });
+        const untaggedIds = ungroupedCourseIds.filter(cid=>!roomTaggedIds.includes(cid));
+
+        if(roomTaggedIds.length){
+          const byRoomSet = new Map();
+          roomTaggedIds.forEach(cid=>{
+            const c = courseById.get(cid);
+            const key = [...c.allowedRoomIds].sort().join(',');
+            if(!byRoomSet.has(key)) byRoomSet.set(key, []);
+            byRoomSet.get(key).push(cid);
+          });
+          byRoomSet.forEach((cids, key)=>{
+            const tagStrips = buildStrips(cids);
+            if(!tagStrips.length) return;
+            const tagRooms = key.split(',').map(id=>activeRooms.find(r=>r.id===id)).filter(Boolean)
+              .sort((a,b)=>roomCapacity(b)-roomCapacity(a));
+            if(!tagRooms.length){
+              // Tagged room(s) no longer exist or are inactive -- fall back to the shared pool.
+              const result = placeStrips(tagStrips, roomIdx, colCursor);
+              roomIdx = result.roomIdx; colCursor = result.colCursor;
+              return;
+            }
+            const res = placeStripsInto(tagStrips, tagRooms, 0, 1, seatsPerCol);
+            if(res.leftover > 0){
+              const result = placeStrips(tagStrips, roomIdx, colCursor);
+              roomIdx = result.roomIdx; colCursor = result.colCursor;
+              roomTagOverflowCount++;
+            }
+          });
+        }
+
+        // Lab-marked papers go into Lab-marked rooms only, kept separate
+        // from the ordinary room pool. If no Lab room is configured yet,
+        // fall back to the shared pool so the paper still gets seated
+        // somewhere, and flag it in the completion toast.
+        const labIds = untaggedIds.filter(cid=>{ const c=courseById.get(cid); return c&&c.isLab; });
+        const nonLabIds = untaggedIds.filter(cid=>!labIds.includes(cid));
+        if(labIds.length){
+          const labStrips = buildStrips(labIds);
+          if(labStrips.length){
+            if(sharedLabRooms.length){
+              const res = placeStripsInto(labStrips, sharedLabRooms, labRoomIdx, labColCursor, seatsPerCol);
+              labRoomIdx = res.roomIdx; labColCursor = res.colCursor;
+            } else {
+              noLabRoomCount += labIds.length;
+              const result = placeStrips(labStrips, roomIdx, colCursor);
+              roomIdx = result.roomIdx; colCursor = result.colCursor;
+            }
+          }
+        }
+        // Continue filling the current room's remaining columns rather than
+        // skipping to a fresh room, to keep utilization maximal.
+        if(nonLabIds.length){
+          const strips = buildStrips(nonLabIds);
+          if(strips.length) placeStrips(strips, roomIdx, colCursor);
+        }
+      }
+    }
+  }
+
+  state.seating = seating;
+
+  // Students intentionally placed in the manual park are not re-added by an
+  // automatic seating pass. They remain available in the session's park until
+  // the user drags each one into an empty physical room slot.
+  const parked = Array.isArray(state.parkedStudents) ? state.parkedStudents : [];
+  state.seating = state.seating.filter(x =>
+    !parked.some(p=>p.sessionId===x.sessionId && p.studentId===x.studentId && p.courseId===x.courseId)
+  );
+  state.manualSeatOverrides = (Array.isArray(state.manualSeatOverrides)?state.manualSeatOverrides:[])
+    .filter(o=>!parked.some(p=>p.sessionId===o.sessionId && p.studentId===o.studentId && p.courseId===o.courseId));
+
+  // Re-apply valid manual seat placements after every automatic/group seating pass.
+  const overrides = Array.isArray(state.manualSeatOverrides) ? state.manualSeatOverrides : [];
+  overrides.forEach(o=>{
+    const st = state.students.find(x=>x.id===o.studentId);
+    const c = state.courses.find(x=>x.id===o.courseId);
+    const sess = state.sessions.find(x=>x.id===o.sessionId);
+    const room = state.rooms.find(x=>x.id===o.roomId);
+    if(!st || !c || !sess || !room || room.active===false) return;
+    if(!st.courseIds.includes(c.id)) return;
+    if(!state.scheduled.some(sc=>sc.sessionId===sess.id && sc.courseId===c.id)) return;
+    const occupied = state.seating.find(x=>x.sessionId===o.sessionId && x.roomId===o.roomId && x.row===o.row && x.col===o.col);
+    // Manual overrides are authoritative. If automatic seating reused the
+    // target slot, release that generated occupant so a manual placement can
+    // still place more than the automatic course cap in one room.
+    if(occupied && occupied.studentId!==o.studentId){
+      state.seating = state.seating.filter(x=>!(x.sessionId===o.sessionId && x.roomId===o.roomId && x.row===o.row && x.col===o.col));
+    }
+    state.seating = state.seating.filter(x=>x.studentId!==o.studentId && !(x.sessionId===o.sessionId && x.roomId===o.roomId && x.row===o.row && x.col===o.col));
+    state.seating.push({sessionId:o.sessionId,roomId:o.roomId,row:o.row,col:o.col,studentId:o.studentId,courseId:o.courseId,manual:true});
+  });
+
+  // Final synchronization: anything that now has a physical seat must not
+  // remain in the Student Park / pending Unscheduled Papers view.
+  reconcileParkedWithSeating();
+  save(); safeRender();
+
+  const placed = seating.length;
+  const scheduledBySessionForCount = new Map();
+  state.scheduled.forEach(sc=>{
+    if(!scheduledBySessionForCount.has(sc.sessionId)) scheduledBySessionForCount.set(sc.sessionId,[]);
+    scheduledBySessionForCount.get(sc.sessionId).push(sc);
+  });
+  const totalNeeded = state.sessions.reduce((n,sess)=>
+    n + (scheduledBySessionForCount.get(sess.id)||[])
+      // When onlyGrouped, only courses that belong to a manual group count
+      // toward "needed" — ungrouped students were intentionally left unseated.
+      .filter(s=>!onlyGrouped || allGroupedCourseIds.has(s.courseId))
+      .reduce((m,s)=>{ const c=courseById.get(s.courseId); return m+(c?c.studentCount||0:0); },0)
+  ,0);
+  const parkedCount = parked.filter(p=>state.sessions.some(s=>s.id===p.sessionId)).length;
+  const unplaced = Math.max(0, totalNeeded - placed - parkedCount);
+  const groupCount = (state.manualProgramGroups||[]).filter(g=>g.programs&&g.programs.length>=1).length;
+  toast(
+    `Seating complete — ${placed} students placed across ${activeRooms.length} rooms` +
+    (groupCount ? ` (${groupCount} group${groupCount>1?'s':''} seated together)` : '') +
+    (onlyGrouped ? ` — ungrouped students left unseated` : '') +
+    (pinnedOverflowCount ? ` ⚠ ${pinnedOverflowCount} pinned-room group${pinnedOverflowCount>1?'s':''} overflowed into other rooms` : '') +
+    (roomTagOverflowCount ? ` ⚠ ${roomTagOverflowCount} room-tagged course${roomTagOverflowCount>1?'s':''} overflowed into other rooms` : '') +
+    (noLabRoomCount ? ` ⚠ ${noLabRoomCount} Lab course(s) seated in regular rooms -- no Lab room is configured (check the Lab box in Rooms)` : '') +
+    (parkedCount ? ` · ${parkedCount} parked for manual placement` : '') +
+    (unplaced>0 ? ` ⚠ ${unplaced} could not fit — add more rooms` : ' ✓'),
+    unplaced>0 ? 'warn' : 'ok'
+  );
+}
+
+/* Compute disjoint program groups for a session */
+function programGroupsForSession(sess){
+  const byProg = new Map();
+  state.scheduled.filter(s=>s.sessionId===sess.id).forEach(ex=>{
+    const c = state.courses.find(x=>x.id===ex.courseId);
+    if(!c) return;
+    if(!byProg.has(c.program)) byProg.set(c.program,{prog:c.program, courseIds:[], students:new Set()});
+    const p = byProg.get(c.program);
+    p.courseIds.push(c.id);
+    studentsOf(c.id).forEach(s=>p.students.add(s));
+  });
+  const progs = [...byProg.values()].sort((a,b)=>b.students.size-a.students.size);
+  const groups = [];
+  progs.forEach(p=>{
+    let placed=false;
+    for(const g of groups){
+      const collide = g.some(g2=>{ for(const s of p.students){ if(g2.students.has(s)) return true; } return false; });
+      if(!collide){ g.push(p); placed=true; break; }
+    }
+    if(!placed) groups.push([p]);
+  });
+  return groups;
+}
+
+/* Re-seat one session by combining selected programs.
+   Uses shared assignColumnsInRoom so same-series gap rule is always applied. */
+function applyCombo(sessId, progList){
+  const activeRooms = state.rooms.filter(r=>r.active!==false)
+    .sort((a,b)=>(b.cols*b.rows)-(a.cols*a.rows));
+  if(!activeRooms.length){ toast('No active rooms','err'); return; }
+
+  state.seating = state.seating.filter(s=>s.sessionId!==sessId);
+
+  const progMap = new Map();
+  state.scheduled.filter(s=>s.sessionId===sessId).forEach(ex=>{
+    const c = state.courses.find(x=>x.id===ex.courseId);
+    if(!c || !progList.includes(c.program)) return;
+    const ids = studentsOf(c.id);
+    const arr = ids.length
+      ? ids.map(id=>{ const st=state.students.find(x=>x.id===id); return {studentId:id, rollNo:st?st.rollNo:id, courseId:c.id}; })
+      : Array.from({length:c.studentCount||0}).map((_,i)=>({studentId:`${c.id}-${i}`, rollNo:`${c.code}-${String(i).padStart(4,'0')}`, courseId:c.id}));
+    if(!progMap.has(c.program)) progMap.set(c.program,[]);
+    progMap.get(c.program).push(...arr);
+  });
+
+  const strips = [...progMap.entries()].map(([prog, students])=>{
+    students.sort((a,b)=>a.rollNo.localeCompare(b.rollNo));
+    return { series: rollSeries(students[0]?.rollNo||prog), students, offset:0 };
+  }).sort((a,b)=>b.students.length-a.students.length);
+
+  if(!strips.length){ toast('No students for selected programs','warn'); save(); safeRender(); return; }
+
+  const seatsPerCol = state.seatsPerColumn || 8;
+  let totalPlaced = 0;
+  let roomIdx = 0, colCursor = 1;
+  const remaining = () => strips.reduce((n,s)=>n+(s.students.length-s.offset),0);
+  while(remaining() > 0 && roomIdx < activeRooms.length){
+    const room = activeRooms[roomIdx];
+    if(colCursor > room.cols){ roomIdx++; colCursor=1; continue; }
+    const { placed, nextCol } = assignColumnsInRoom(strips, room, seatsPerCol, colCursor);
+    placed.forEach(p=>{ state.seating.push({sessionId:sessId, roomId:room.id, ...p}); totalPlaced++; });
+    if(nextCol > room.cols || placed.length===0){ roomIdx++; colCursor=1; }
+    else colCursor = nextCol;
+  }
+  const unplaced = strips.reduce((n,s)=>n+(s.students.length-s.offset),0);
+  save(); safeRender();
+  toast(`Seated ${progList.join(' + ')} — ${totalPlaced} placed`+(unplaced?` ⚠ ${unplaced} unplaced (add more rooms)`:' ✓'), unplaced?'warn':'ok');
+}
+
+/* Seat ALL students of a given term code (e.g. 251) for one session.
+   Gap column inserted whenever same series would be adjacent. */
+function applyTermCode(sessId, term){
+  const activeRooms = state.rooms.filter(r=>r.active!==false)
+    .sort((a,b)=>(b.cols*b.rows)-(a.cols*a.rows));
+  if(!activeRooms.length){ toast('No active rooms','err'); return; }
+
+  state.seating = state.seating.filter(s=>s.sessionId!==sessId);
+
+  const progMap = new Map();
+  state.scheduled.filter(s=>s.sessionId===sessId).forEach(ex=>{
+    const c = state.courses.find(x=>x.id===ex.courseId);
+    if(!c) return;
+    const ids = studentsOf(c.id);
+    const arr = ids.length
+      ? ids.map(id=>{ const st=state.students.find(x=>x.id===id); return {studentId:id, rollNo:st?st.rollNo:id, courseId:c.id}; })
+      : Array.from({length:c.studentCount||0}).map((_,i)=>({studentId:`${c.id}-${i}`, rollNo:`${c.code}-${String(i).padStart(4,'0')}`, courseId:c.id}));
+    arr.filter(s=>termCode(s.rollNo)===term).forEach(s=>{
+      if(!progMap.has(c.program)) progMap.set(c.program,[]);
+      progMap.get(c.program).push(s);
+    });
+  });
+
+  const strips = [...progMap.entries()].map(([prog, students])=>{
+    students.sort((a,b)=>a.rollNo.localeCompare(b.rollNo));
+    // Series key = program+term so BBA251 and BSCS251 are distinct series
+    return { series: prog+term, students, offset:0 };
+  }).sort((a,b)=>b.students.length-a.students.length);
+
+  if(!strips.length){ toast(`No ${term} students in this session`,'warn'); save(); safeRender(); return; }
+
+  const seatsPerCol = state.seatsPerColumn || 8;
+  let totalPlaced = 0;
+  let roomIdx2 = 0, colCursor2 = 1;
+  const remaining2 = () => strips.reduce((n,s)=>n+(s.students.length-s.offset),0);
+  while(remaining2() > 0 && roomIdx2 < activeRooms.length){
+    const room = activeRooms[roomIdx2];
+    if(colCursor2 > room.cols){ roomIdx2++; colCursor2=1; continue; }
+    const { placed, nextCol } = assignColumnsInRoom(strips, room, seatsPerCol, colCursor2);
+    placed.forEach(p=>{ state.seating.push({sessionId:sessId, roomId:room.id, ...p}); totalPlaced++; });
+    if(nextCol > room.cols || placed.length===0){ roomIdx2++; colCursor2=1; }
+    else colCursor2 = nextCol;
+  }
+  const unplaced = strips.reduce((n,s)=>n+(s.students.length-s.offset),0);
+  save(); safeRender();
+  toast(`Seated term ${term} — ${totalPlaced} placed`+(unplaced?` ⚠ ${unplaced} unplaced (need more rooms)`:' ✓'), unplaced?'warn':'ok');
+}
+
+/* ================= MANUAL PROGRAM GROUPS ================= */
+function addManualGroup(){
+  const name = (document.getElementById('newGroupName').value||'').trim() || ('Group '+(state.manualProgramGroups.length+1));
+  state.manualProgramGroups = state.manualProgramGroups || [];
+  state.manualProgramGroups.push({id:uid(), name, programs:[], roomIds:[], rowsPerCol:null});
+  document.getElementById('newGroupName').value = '';
+  save(); renderManualGroups();
+}
+function delManualGroup(gid){
+  state.manualProgramGroups = (state.manualProgramGroups||[]).filter(g=>g.id!==gid);
+  save(); renderManualGroups();
+}
+function toggleProgInGroup(gid, prog){
+  const g = (state.manualProgramGroups||[]).find(x=>x.id===gid); if(!g) return;
+  if(g.programs.includes(prog)) g.programs = g.programs.filter(p=>p!==prog);
+  else g.programs.push(prog);
+  save(); renderManualGroups();
+}
+function renameManualGroup(gid, name){
+  const g = (state.manualProgramGroups||[]).find(x=>x.id===gid); if(!g) return;
+  g.name = name; save();
+}
+function toggleRoomInGroup(gid, roomId){
+  const g = (state.manualProgramGroups||[]).find(x=>x.id===gid); if(!g) return;
+  g.roomIds = g.roomIds || [];
+  if(g.roomIds.includes(roomId)) g.roomIds = g.roomIds.filter(r=>r!==roomId);
+  else g.roomIds.push(roomId); // order = priority order rooms are filled in
+  save(); renderManualGroups();
+}
+function setGroupRowsOverride(gid, val){
+  const g = (state.manualProgramGroups||[]).find(x=>x.id===gid); if(!g) return;
+  const n = +val;
+  g.rowsPerCol = (n>0) ? Math.max(1, Math.min(50, n)) : null;
+  save();
+}
+
+/* ===== Quick Program Picker (top of Seating tab) ===== */
+const quickPickSelected = new Set();
+function renderQuickProgPicker(){
+  const el = document.getElementById('quickProgChips'); if(!el) return;
+  const allProgs = [...new Set(state.courses
+    .filter(c=>!c.excluded && !(state.excludeLabs&&c.isLab) && !state.excludePrograms.includes(c.program))
+    .map(c=>c.program))].sort();
+  if(!allProgs.length){ el.innerHTML = '<span class="desc">No programs available — import courses first.</span>'; return; }
+  el.innerHTML = allProgs.map(p=>{
+    const sel = quickPickSelected.has(p);
+    const inGroup = (state.manualProgramGroups||[]).some(g=>g.programs.includes(p));
+    return `<span class="prog-pill${sel?' selected':''}" style="cursor:pointer" onclick="toggleQuickPick('${p}')" title="${inGroup?'Already in a group':'Click to select'}">${esc(p)}${inGroup?' <sup>•</sup>':''}</span>`;
+  }).join('');
+  const hint = document.getElementById('quickGroupHint');
+  if(hint) hint.textContent = quickPickSelected.size ? `${quickPickSelected.size} selected: ${[...quickPickSelected].join(' + ')}` : 'Pick programs to group together (1 = isolated block, 2+ = interleaved together).';
+}
+function toggleQuickPick(p){
+  if(quickPickSelected.has(p)) quickPickSelected.delete(p); else quickPickSelected.add(p);
+  renderQuickProgPicker();
+}
+function createGroupFromQuickPick(){
+  if(quickPickSelected.size < 1){ toast('Select at least 1 program','warn'); return; }
+  const name = (document.getElementById('quickGroupName').value||'').trim()
+    || ([...quickPickSelected].join(' + '));
+  state.manualProgramGroups = state.manualProgramGroups || [];
+  state.manualProgramGroups.push({id:uid(), name, programs:[...quickPickSelected], roomIds:[], rowsPerCol:null});
+  document.getElementById('quickGroupName').value = '';
+  quickPickSelected.clear();
+  save(); renderManualGroups(); renderQuickProgPicker();
+  toast(`Group "${name}" created`,'ok');
+}
+
+/* ===== Auto-Fix ALL daily overloads (no student gets 2+ exams the same day) ===== */
+function autoFixAllDailyOverloads(){
+  if(!state.scheduled.length){ toast('Run Auto Schedule first','err'); return; }
+  // Per-student daily cap: 1 exam/day, but 99 if student has 7+ total exams
+  const _scc = new Map();
+  state.students.forEach(st => _scc.set(st.id, (st.courseIds||[]).length));
+  const capFor = (sid) => (_scc.get(sid)||0) >= 7 ? 2 : 1;
+  let moved = 0, failed = 0, passes = 0;
+  const MAX_PASSES = 12;
+
+  function buildEnroll(){
+    const m = new Map();
+    state.students.forEach(st => (st.courseIds||[]).forEach(cid=>{
+      if(!m.has(cid)) m.set(cid, new Set());
+      m.get(cid).add(st.id);
+    }));
+    return m;
+  }
+  function offendingCourses(enroll){
+    const dayMap = new Map();
+    state.scheduled.forEach(sc=>{
+      const sess = state.sessions.find(s=>s.id===sc.sessionId); if(!sess) return;
+      (enroll.get(sc.courseId)||new Set()).forEach(sid=>{
+        const k = sid+'|'+sess.date;
+        if(!dayMap.has(k)) dayMap.set(k,[]);
+        dayMap.get(k).push(sc.courseId);
+      });
+    });
+    const score = new Map();
+    dayMap.forEach((arr, key)=>{
+      const sid = key.split('|')[0];
+      const cap = capFor(sid);
+      if(arr.length > cap){
+        for(let i=cap;i<arr.length;i++) score.set(arr[i],(score.get(arr[i])||0)+1);
+      }
+    });
+    return [...score.entries()].sort((a,b)=>b[1]-a[1]).map(e=>e[0]);
+  }
+
+  while(passes++ < MAX_PASSES){
+    const enroll = buildEnroll();
+    const candidates = offendingCourses(enroll);
+    if(!candidates.length) break;
+    let progressed = false;
+    for(const courseId of candidates){
+      const cur = state.scheduled.find(sc=>sc.courseId===courseId); if(!cur) continue;
+      const curSess = state.sessions.find(s=>s.id===cur.sessionId); if(!curSess) continue;
+      const stu = enroll.get(courseId) || new Set();
+      const target = state.sessions.find(ts=>{
+        if(ts.id===cur.sessionId || ts.date===curSess.date) return false;
+        const targetStus = new Set();
+        state.scheduled.filter(sc=>sc.sessionId===ts.id && sc.courseId!==courseId)
+          .forEach(sc=>(enroll.get(sc.courseId)||new Set()).forEach(sid=>targetStus.add(sid)));
+        for(const sid of stu){ if(targetStus.has(sid)) return false; }
+        const dayLoad = new Map();
+        state.scheduled.forEach(sc=>{
+          const ss = state.sessions.find(x=>x.id===sc.sessionId);
+          if(!ss || ss.date!==ts.date || sc.courseId===courseId) return;
+          (enroll.get(sc.courseId)||new Set()).forEach(sid=>dayLoad.set(sid,(dayLoad.get(sid)||0)+1));
+        });
+        for(const sid of stu){ if((dayLoad.get(sid)||0)+1 > capFor(sid)) return false; }
+        const c = state.courses.find(x=>x.id===courseId);
+        if(sessionCapUsed(ts.id) + (c?.studentCount||stu.size||0) > totalRoomCap()) return false;
+        return true;
+      });
+      if(target){
+        cur.sessionId = target.id;
+        state.seating = state.seating.filter(s=>s.courseId!==courseId);
+        moved++; progressed = true; break;
+      }
+    }
+    if(!progressed){ failed = candidates.length; break; }
+  }
+
+  save(); render();
+  if(moved && !failed) toast(`Auto-Fix complete — moved ${moved} course${moved>1?'s':''}, no student has 2 exams the same day`,'ok');
+  else if(moved && failed) toast(`Moved ${moved}, but ${failed} could not be relocated — add more session dates`,'warn');
+  else if(!moved && !failed) toast('No daily overloads to fix','ok');
+  else toast('Could not auto-fix — add more session dates','err');
+}
+
+function renderManualGroups(){
+  const el = document.getElementById('manualGroupsList'); if(!el) return;
+  const groups = state.manualProgramGroups || [];
+  const allProgs = [...new Set(state.courses.filter(c=>!c.excluded&&!(state.excludeLabs&&c.isLab)&&!state.excludePrograms.includes(c.program)).map(c=>c.program))].sort();
+
+  if(!groups.length){
+    el.innerHTML = '<div class="desc" style="margin-bottom:4px">No groups yet — use "Create a new group" above to build one.</div>'; return;
+  }
+
+  el.innerHTML = groups.map(g => {
+    const totalStudents = allProgs
+      .filter(p=>g.programs.includes(p))
+      .reduce((n,p)=>{
+        const stuSet = new Set();
+        state.courses.filter(c=>c.program===p).forEach(c=>studentsOf(c.id).forEach(s=>stuSet.add(s)));
+        return n+stuSet.size;
+      },0);
+    const totalCap = state.rooms.filter(r=>r.active!==false).reduce((n,r)=>n+roomCapacity(r),0);
+    const capOk = totalStudents <= totalCap;
+
+    return `<div class="group-builder">
+      <div class="gb-header">
+        <div style="display:flex;align-items:center;gap:8px">
+          <input value="${esc(g.name)}" onchange="renameManualGroup('${g.id}',this.value)" style="font-size:13px;font-weight:600;color:var(--pri);border:none;background:transparent;padding:0;width:200px">
+          ${g.programs.length ? `<span class="${capOk?'room-cap-badge':'room-cap-badge warn'}" title="Total students in group vs total room capacity">${totalStudents} students · ${totalCap} seats available</span>` : ''}
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          ${g.programs.length>=1 ? `<button class="autofix-btn" onclick="applyManualGroupToAllSessions('${g.id}')" title="Re-generate seating with all groups seated together">🪑 Apply All Groups & Re-Seat</button>` : ''}
+          <button class="btn sm danger" onclick="delManualGroup('${g.id}')">× Delete</button>
+        </div>
+      </div>
+      <div style="margin-bottom:6px;font-size:11.5px;color:var(--mut)">Click programs to add/remove from this group <span style="color:#15803d;font-weight:600">(only scheduled exam programs shown — excluded &amp; lab courses are hidden)</span>:</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">
+        ${allProgs.map(p=>{
+          const inGroup = g.programs.includes(p);
+          const inOther = (state.manualProgramGroups||[]).some(og=>og.id!==g.id&&og.programs.includes(p));
+          return `<span class="prog-pill${inGroup?' selected':''}" onclick="toggleProgInGroup('${g.id}','${p}')" title="${inOther?'⚠ Also in another group':p}">
+            ${esc(p)}${inOther?'<sup>!</sup>':''}
+          </span>`;
+        }).join('')}
+      </div>
+      ${g.programs.length ? `<div style="font-size:11px;color:var(--mut);margin-bottom:10px">Selected: <b style="color:var(--pri)">${g.programs.join(' + ')}</b>
+        ${g.programs.length>=2?`<span style="margin-left:10px;font-size:10.5px">Adjacent columns will alternate programs so neighbours never share the same exam.</span>`:'<span style="margin-left:8px;font-size:10.5px;color:#15803d">✓ This program will be seated together in its own room block.</span>'}
+      </div>` : '<div style="font-size:11px;color:var(--mut);font-style:italic;margin-bottom:10px">No programs selected yet.</div>'}
+      <div style="border-top:1px dashed var(--brd);padding-top:8px;margin-top:2px">
+        <div style="margin-bottom:6px;font-size:11.5px;color:var(--mut)">Pin this group to specific room(s) <i>(click to select, in the order they should fill — leave empty to auto-pick any free room)</i>:</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">
+          ${state.rooms.filter(r=>r.active!==false).map(r=>{
+            const idx = (g.roomIds||[]).indexOf(r.id);
+            const sel = idx>-1;
+            const usedElsewhere = (state.manualProgramGroups||[]).some(og=>og.id!==g.id && (og.roomIds||[]).includes(r.id));
+            return `<span class="room-pill${sel?' selected':''}" onclick="toggleRoomInGroup('${g.id}','${r.id}')" title="${usedElsewhere?'⚠ Also pinned to another group':r.name+' — '+roomCapacity(r)+' seats'}">
+              ${sel?`<span class="ord">${idx+1}</span>`:''}${esc(r.name)}${usedElsewhere?'<sup>!</sup>':''}
+            </span>`;
+          }).join('') || '<span class="desc">No active rooms — add rooms in the Rooms tab first.</span>'}
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--mut);flex-wrap:wrap">
+          Rows per column for this group (optional override):
+          <input type="number" min="1" max="50" placeholder="auto (${state.seatsPerColumn||8})" value="${g.rowsPerCol||''}"
+            onchange="setGroupRowsOverride('${g.id}',this.value)" style="width:110px">
+          <span style="font-size:10.5px">Leave blank to use the global Seats-per-Column setting above.</span>
+        </label>
+        ${(g.roomIds&&g.roomIds.length) ? `<div style="margin-top:6px;font-size:10.5px;color:#92400e">📌 Fills <b>${g.roomIds.map(id=>{const r=state.rooms.find(x=>x.id===id);return r?r.name:'?';}).join(' → ')}</b> first; overflow (if any) spills into the next free room.</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ===== Auto-resolve same-session student clashes (e.g. one student booked into
+   two exams at the exact same time) BEFORE seating runs. A clash can only be
+   fixed by moving one of the two clashing courses to a different session —
+   preferring a different DATE so the affected students genuinely get a
+   different day, not just a different room on the same day/time. Never
+   creates a new student clash, faculty clash, daily-overload, or capacity
+   overrun; if no safe slot exists for either course the clash is left in
+   place and reported so it can be handled manually from the Conflicts tab. */
+function autoResolveStudentClashes(){
+  if(!state.scheduled.length) return {moved:0, failed:0};
+  const _scc = new Map();
+  state.students.forEach(st => _scc.set(st.id, (st.courseIds||[]).length));
+  const dayCapForStu = (sid) => (_scc.get(sid)||0) >= 7 ? 2 : 1;
+
+  function buildEnroll(){
+    const m = new Map();
+    state.students.forEach(st => (st.courseIds||[]).forEach(cid=>{
+      if(!m.has(cid)) m.set(cid, new Set());
+      m.get(cid).add(st.id);
+    }));
+    return m;
+  }
+
+  let moved = 0, failed = 0, passes = 0;
+  const MAX_PASSES = 30;
+
+  while(passes++ < MAX_PASSES){
+    const enroll = buildEnroll();
+
+    // Find one same-session clash pair (two courses in the same session sharing a student)
+    const bySession = new Map();
+    state.scheduled.forEach(sc=>{
+      if(!bySession.has(sc.sessionId)) bySession.set(sc.sessionId, []);
+      bySession.get(sc.sessionId).push(sc.courseId);
+    });
+    let clashPair = null;
+    outer: for(const [sessId, cids] of bySession){
+      for(let i=0;i<cids.length;i++){
+        for(let j=i+1;j<cids.length;j++){
+          const sa = enroll.get(cids[i]) || new Set();
+          const sb = enroll.get(cids[j]) || new Set();
+          let shared = false;
+          for(const sid of sa){ if(sb.has(sid)){ shared = true; break; } }
+          if(shared){ clashPair = {sessId, cA:cids[i], cB:cids[j]}; break outer; }
+        }
+      }
+    }
+    if(!clashPair) break; // no clashes left
+
+    // Try moving the smaller-enrollment course first (less disruptive overall)
+    const candidates = [clashPair.cA, clashPair.cB]
+      .sort((a,b)=>(enroll.get(a)?.size||0)-(enroll.get(b)?.size||0));
+
+    let resolved = false;
+    for(const courseId of candidates){
+      const cur = state.scheduled.find(sc=>sc.courseId===courseId); if(!cur) continue;
+      const curSess = state.sessions.find(s=>s.id===cur.sessionId); if(!curSess) continue;
+      const stu = enroll.get(courseId) || new Set();
+      const course = state.courses.find(c=>c.id===courseId);
+
+      // Different-date sessions are tried first so the clashing students land
+      // on a genuinely different day; same-date sessions are the fallback.
+      const candidateSessions = state.sessions
+        .filter(ts=>ts.id!==cur.sessionId)
+        .slice()
+        .sort((a,b)=> (a.date===curSess.date?1:0) - (b.date===curSess.date?1:0));
+
+      const target = candidateSessions.find(ts=>{
+        const targetStus = new Set();
+        state.scheduled.filter(sc=>sc.sessionId===ts.id && sc.courseId!==courseId)
+          .forEach(sc=>(enroll.get(sc.courseId)||new Set()).forEach(sid=>targetStus.add(sid)));
+        for(const sid of stu){ if(targetStus.has(sid)) return false; } // would create a new clash
+        if(course?.faculty){
+          const facClash = state.scheduled.some(sc=>sc.sessionId===ts.id && sc.courseId!==courseId &&
+            state.courses.find(c=>c.id===sc.courseId)?.faculty===course.faculty);
+          if(facClash) return false;
+        }
+        const dayLoad = new Map();
+        state.scheduled.forEach(sc=>{
+          const ss = state.sessions.find(x=>x.id===sc.sessionId);
+          if(!ss || ss.date!==ts.date || sc.courseId===courseId) return;
+          (enroll.get(sc.courseId)||new Set()).forEach(sid=>dayLoad.set(sid,(dayLoad.get(sid)||0)+1));
+        });
+        for(const sid of stu){ if((dayLoad.get(sid)||0)+1 > dayCapForStu(sid)) return false; }
+        if(sessionCapUsed(ts.id) + (course?.studentCount||stu.size||0) > totalRoomCap()) return false;
+        return true;
+      });
+
+      if(target){
+        cur.sessionId = target.id;
+        // Clear stale seating for the moved course -- it'll be re-seated fresh
+        // (on its new day/room) by the seating pass that runs right after this.
+        state.seating = state.seating.filter(s=>s.courseId!==courseId);
+        moved++; resolved = true; break;
+      }
+    }
+    if(!resolved){ failed++; break; } // neither course in this pair has a safe slot -- stop here
+  }
+
+  if(moved) save();
+  return {moved, failed};
+}
+
+function applyManualGroupToAllSessions(gid){
+  const g = (state.manualProgramGroups||[]).find(x=>x.id===gid);
+  if(!g || g.programs.length < 1){ toast('Select at least 1 program in the group','warn'); return; }
+  // Resolve same-session student clashes FIRST -- a student can't physically sit
+  // two exams at once, so the only fix is moving one clashing course to a
+  // different day. Doing this before seating means those students always end
+  // up with a normal, distinct seat on a different day instead of an
+  // impossible double-booking.
+  const fix = autoResolveStudentClashes();
+  // runSeating(true) seats every manual group's students only — programs not
+  // in any group are left unseated instead of filling the remaining rooms.
+  // Rooms are still filled to max capacity (largest room first, columns packed
+  // fully) before spilling into the next room, same as always.
+  runSeating(true);
+  const clashMsg = fix.moved ? ` — resolved ${fix.moved} student clash${fix.moved>1?'es':''} by moving to a different day` : '';
+  const failMsg = fix.failed ? ` ⚠ ${fix.failed} clash${fix.failed>1?'es':''} couldn't be auto-resolved (no safe slot) — check Conflicts tab` : '';
+  toast(`Group "${g.name}" applied — only grouped students seated, ungrouped programs left out${clashMsg}${failMsg}`, fix.failed ? 'warn' : 'ok');
+}
+
+function renderSeating(){
+  // Clash-card checkboxes always render unchecked, but _selectedDragKeys
+  // persisted across renders (it was only cleared on a *successful*
+  // park/assign). Any rebuild of this panel invalidates whatever was
+  // checked before, so drop the stale keys here too -- otherwise a student
+  // selected before a regenerate/park/assign could silently reattach to a
+  // later, unrelated drag and produce a bogus "no exam in this session".
+  if(typeof clearDragSelection==='function') clearDragSelection();
+  const v = document.getElementById('seatingView');
+  const dragViewport=_dragViewport;
+  const savedScrollX=dragViewport?.x ?? window.scrollX;
+  const savedScrollY=dragViewport?.y ?? window.scrollY;
+  const parkSidebar=document.getElementById('studentParkSidebar');
+  const savedParkScrollTop=dragViewport?.parkScrollTop ?? (parkSidebar ? parkSidebar.scrollTop : 0);
+  const savedRoomScrollLeft=dragViewport?.roomScrollLeft || [...v.querySelectorAll('.section-room > div[style*="overflow-x:auto"]')]
+    .map(el=>el.scrollLeft);
+  // Rebuilding the class grids momentarily shrinks the page (old content is
+  // gone before the new content is laid out). If that shrink happens below
+  // the current scroll position, the browser is forced to clamp scrollY
+  // down immediately -- a visible jump to the top -- before our restore()
+  // calls below can scroll back down. Locking the body/container height to
+  // its current size *before* touching innerHTML stops that forced clamp,
+  // so the page never actually moves; it just stays put the whole time.
+  const lockH = document.body.scrollHeight;
+  document.body.style.minHeight = lockH + 'px';
+  const vLockH = v.offsetHeight;
+  v.style.minHeight = vLockH + 'px';
+  const unlockHeights=()=>{
+    document.body.style.minHeight = '';
+    v.style.minHeight = '';
+  };
+  // Rebuilding the class grids removes the browser's scroll anchor. Restore
+  // after both layout passes so a drop never jumps back to the top.
+  const restoreScroll=()=>{
+    const restore=()=>{
+      window.scrollTo(savedScrollX,savedScrollY);
+      document.documentElement.scrollTop=savedScrollY;
+      document.body.scrollTop=savedScrollY;
+      const nextParkSidebar=document.getElementById('studentParkSidebar');
+      if(nextParkSidebar) nextParkSidebar.scrollTop=savedParkScrollTop;
+      [...v.querySelectorAll('.section-room > div[style*="overflow-x:auto"]')]
+        .forEach((el,i)=>{ if(savedRoomScrollLeft[i] != null) el.scrollLeft=savedRoomScrollLeft[i]; });
+    };
+    requestAnimationFrame(()=>{
+      restore();
+      requestAnimationFrame(()=>{
+        restore();
+        setTimeout(restore,0);
+        setTimeout(()=>{ restore(); unlockHeights(); },80);
+      });
+    });
+  };
+  renderStudentParkSidebar();
+  const parkedAny = Array.isArray(state.parkedStudents) && state.parkedStudents.length;
+  if(!state.seating.length && !parkedAny){ v.innerHTML = '<div class="empty-state">No seating plan yet -- click Generate Seating.</div>'; restoreScroll(); return; }
+
+  // ===== CLASH STUDENTS — manual seating queue =====
+  const clashMap = new Map();
+  const scheduledBySession = new Map();
+  state.scheduled.forEach(sc=>{
+    if(!scheduledBySession.has(sc.sessionId)) scheduledBySession.set(sc.sessionId,[]);
+    scheduledBySession.get(sc.sessionId).push(sc.courseId);
+  });
+  state.sessions.forEach(sess=>{
+    const cids = scheduledBySession.get(sess.id)||[];
+    if(cids.length<2) return;
+    const seen = new Map();
+    cids.forEach(cid=>studentsOf(cid).forEach(sid=>{
+      if(!seen.has(sid)) seen.set(sid,[]);
+      seen.get(sid).push(cid);
+    }));
+    seen.forEach((courseIds,sid)=>{
+      if(courseIds.length<2) return;
+      if(!clashMap.has(sid)) clashMap.set(sid,[]);
+      clashMap.get(sid).push({sessionId:sess.id,session:sess,courseIds});
+    });
+  });
+  const clashStudents = [...clashMap.entries()].map(([sid,items])=>({student:state.students.find(x=>x.id===sid),items})).filter(x=>x.student);
+  // Quick lookup so each course chip on a clash card can show whether that
+  // student has already been manually seated for that specific course.
+  const seatedLookup = new Map();
+  state.seating.forEach(s=>{ seatedLookup.set(`${s.sessionId}|${s.studentId}|${s.courseId}`, s); });
+  const clashPanel = `<div class="card clash-manual-panel">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+       <div><h3>⚠️ Clash Students — Manual Seating Queue <span class="badge red">${clashStudents.length}</span></h3>
+       <div class="desc">Students with two or more courses in the same session are listed here after <b>Generate Seating</b>. Drag a student card onto an empty seat, or into that session's <b>Student Park</b> to hold multiple students before placing them. Checking any course chip (or clicking its code) selects <b>every</b> student clashing on that course at once, then drag any highlighted card to park them all together -- uncheck a box individually to drop just that one student from the selection. A drag only ever carries one course at a time, so picking a different course clears the previous selection. A course already shows <span class="placed-badge">✓ Placed</span> once that student has been seated for it.</div></div>
+      <div class="row" style="gap:8px;flex-wrap:wrap;justify-content:flex-end">
+        <button class="btn sm ghost" onclick="downloadClashSeatingSheet()" title="Download every clash student/course pair as an Excel sheet with Course, Day, Date and Time filled in, and a blank Room column for you to fill in">⬇ Download Clash List</button>
+        <label class="btn sm ghost" style="cursor:pointer" title="Upload the sheet back after filling in the Room column -- each row seats that student in that room for that course/session">⬆ Upload Filled Sheet<input type="file" accept=".xlsx,.xls" style="display:none" onchange="handleClashSeatingUpload(event)"></label>
+        <button class="btn sm ghost" onclick="clearManualSeatOverrides()">Clear Manual Placements</button>
+      </div>
+    </div>
+    <div class="desc" style="margin-top:2px">The downloaded sheet has one row per clashing student/course with <b>Course, Day, Date, Time</b> already filled in -- just type a <b>Room</b> name into the last editable column for each row and upload it back to seat everyone at once.</div>
+    ${clashStudents.length ? `<div class="clash-student-list">${clashStudents.map(({student,items})=>{
+      const coursesHtml=items.map(it=>{
+        const chips=it.courseIds.map(cid=>{
+          const c=state.courses.find(x=>x.id===cid);
+          const ckey=`${it.sessionId}|${student.id}|${cid}`;
+          const seatInfo=seatedLookup.get(ckey);
+          const placedBadge=seatInfo
+            ? (()=>{ const room=state.rooms.find(r=>r.id===seatInfo.roomId); return `<span class="placed-badge" title="Seated at ${esc(room?room.name:seatInfo.roomId)}, Row ${seatInfo.row}, Column ${seatInfo.col}">✓ Placed</span>`; })()
+            : '';
+          return `<span class="clash-course-chip ${seatInfo?'is-placed':''}"><input type="checkbox" class="park-select" data-kind="clashcourse" data-key="${esc(ckey)}" data-course="${esc(cid)}" data-session="${esc(it.sessionId)}" style="margin-right:3px;vertical-align:middle" onclick="toggleDragSelection(event,'clashcourse','${esc(ckey)}',this.checked)" title="Select just this student for this course"> <span onclick="event.stopPropagation();selectCourseForAllStudents('${esc(it.sessionId)}','${esc(cid)}')" style="cursor:pointer;text-decoration:underline dotted" title="Select this course for every clashing student -- then drag any highlighted card to the Student Park">${esc(c?.code||cid)}</span> <small>${esc(c?.section||'')}</small>${placedBadge}</span>`;
+        }).join('');
+        return `<div style="margin-top:5px"><span class="manual-badge">${esc(it.session.day||dayName(it.session.date))} ${esc(it.session.date)} ${esc(it.session.label)}</span> ${chips}</div>`;
+      }).join('');
+       return `<div class="clash-student-card" draggable="true" data-student-id="${esc(student.id)}" ondragstart="startClashStudentDrag(event,'${esc(student.id)}')" title="Select multiple cards, then drag any selected card">
+         <div class="cs-name"><input type="checkbox" class="park-select" onclick="toggleDragSelection(event,'clash','${esc(student.id)}',this.checked)"> ${esc(student.name)}</div><div class="cs-meta">ID: ${esc(student.rollNo)} · ${esc(student.program||'')} · ${esc(student.section||'')}</div>${coursesHtml}
+        <div style="font-size:9.5px;color:#b91c1c;margin-top:6px">↕ Drag to an empty seat</div>
+      </div>`;
+    }).join('')}</div>` : '<div class="empty-state" style="padding:18px">✓ No student session clashes detected.</div>'}
+     <div class="clash-help">Manual seating remains available after program/term grouping. Manual placement ignores the automatic course-per-room limit, is marked with a purple border, and is retained during subsequent seating generation when the placement is still valid.</div>
+  </div>`;
+
+  const colors = ['s1','s2','s3','s4','s5'];
+  const courseColor = new Map();
+  state.courses.forEach((c,i) => courseColor.set(c.id, colors[i%colors.length]));
+  const seatsPerCol = state.seatsPerColumn || 8;
+
+  v.innerHTML = clashPanel + state.sessions.map(sess => {
+    const ss = state.seating.filter(s=>s.sessionId===sess.id);
+    const parkedForSession = (state.parkedStudents||[]).filter(p=>p.sessionId===sess.id);
+    const hasScheduledExam = state.scheduled.some(s=>s.sessionId===sess.id);
+    if(!ss.length && !parkedForSession.length && !hasScheduledExam) return '';
+    // Show every active room, including rooms with zero current seats, so
+    // manual editing can place a parked student in a completely empty room.
+    const roomIds = state.rooms.filter(r=>r.active!==false).map(r=>r.id);
+
+    // Compatible-program groups: courses with disjoint student rosters can share a room
+    const sessCourseIds = state.scheduled.filter(s=>s.sessionId===sess.id).map(s=>s.courseId);
+    const sessCourses = sessCourseIds.map(cid=>{
+      const c = state.courses.find(x=>x.id===cid);
+      return { id:cid, code:c?.code||cid, prog:c?.program||'?', section:c?.section||'', count:c?.studentCount||0, students:new Set(studentsOf(cid)) };
+    });
+    // Greedy disjoint grouping
+    const groups = [];
+    [...sessCourses].sort((a,b)=>b.count-a.count).forEach(c=>{
+      let placed=false;
+      for(const g of groups){
+        const collide = g.some(g2=>{ for(const s of c.students){ if(g2.students.has(s)) return true; } return false; });
+        if(!collide){ g.push(c); placed=true; break; }
+      }
+      if(!placed) groups.push([c]);
+    });
+    // ===== Program-combination tabs (programs that can sit together) =====
+    const progGroups = programGroupsForSession(sess);
+    const comboTabs = progGroups.length ? `<div class="card" style="background:#fefce8;border:1px solid #fde68a;margin-bottom:10px;padding:10px">
+        <div style="font-size:12px;font-weight:600;color:#92400e;margin-bottom:8px">📑 Program combinations — click a tab to seat those programs together in one classroom:</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+          <button class="btn ghost" style="font-size:11px;padding:4px 10px" onclick="runSeating()">↻ Default (auto)</button>
+          ${progGroups.map((g)=>{
+            const progs = g.map(p=>p.prog);
+            const total = g.reduce((n,p)=>n+p.students.size,0);
+            const label = progs.join(' + ');
+            return `<button class="btn" style="font-size:11px;padding:4px 10px;background:#f59e0b;color:#fff;border:none" title="Seat ${esc(label)} together (${total} students)" onclick='applyCombo(${JSON.stringify(sess.id)}, ${JSON.stringify(progs)})'>${esc(label)} <span style="opacity:.85">(${total})</span></button>`;
+          }).join('')}
+        </div>
+        <div style="font-size:10.5px;color:var(--mut);margin-top:6px">Each combination groups programs that share no students — safe to combine in the same room. Adjacent columns will alternate programs so neighbours never sit the same exam.</div>
+      </div>` : '';
+
+    // ===== Term-code tabs (251, 252, 241, 242, ...) — span all programs =====
+    const termCounts = new Map();
+    state.scheduled.filter(s=>s.sessionId===sess.id).forEach(ex=>{
+      const c = state.courses.find(x=>x.id===ex.courseId); if(!c) return;
+      const ids = studentsOf(c.id);
+      const rolls = ids.length
+        ? ids.map(id=>{ const st=state.students.find(x=>x.id===id); return st?st.rollNo:id; })
+        : Array.from({length:c.studentCount||0}).map((_,i)=>`${c.code}-${String(i).padStart(4,'0')}`);
+      rolls.forEach(r=>{ const t=termCode(r); if(!t) return; termCounts.set(t,(termCounts.get(t)||0)+1); });
+    });
+    const termList = [...termCounts.entries()].sort((a,b)=>b[0].localeCompare(a[0]));
+    const termTabs = termList.length ? `<div class="card" style="background:#ecfdf5;border:1px solid #a7f3d0;margin-bottom:10px;padding:10px">
+        <div style="font-size:12px;font-weight:600;color:#065f46;margin-bottom:8px">🎓 Term-code groups — click to seat all students of that intake (e.g. 251 = Fall '25). Same series leaves an empty column between blocks; spills into the next room when full:</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+          ${termList.map(([t,n])=>`<button class="btn" style="font-size:11px;padding:4px 10px;background:#10b981;color:#fff;border:none" title="Seat all ${t} students together (${n})" onclick='applyTermCode(${JSON.stringify(sess.id)}, ${JSON.stringify(t)})'>${esc(t)} <span style="opacity:.85">(${n})</span></button>`).join('')}
+        </div>
+      </div>` : '';
+
+    const groupChips = groups.length ? `<div class="card" style="background:#f0f9ff;border:1px solid #bae6fd;margin-bottom:10px;padding:10px">
+        <div style="font-size:12px;font-weight:600;color:var(--pri);margin-bottom:6px">🪑 Programs that can sit together in one room (${groups.length} group${groups.length>1?'s':''}):</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          ${groups.map((g,i)=>{
+            const total = g.reduce((n,c)=>n+c.count,0);
+            return `<div style="background:#fff;border:1px solid var(--brd);border-radius:6px;padding:7px 10px;min-width:180px">
+              <div style="font-size:10.5px;font-weight:600;color:var(--mut);margin-bottom:4px">Group ${i+1} · ${total} students</div>
+              <div style="display:flex;flex-wrap:wrap;gap:4px">
+                ${g.map(c=>`<span class="badge" style="background:#eff6ff;color:var(--pri);border:1px solid #bfdbfe">${esc(c.code)} · ${esc(c.prog)} ${esc(c.section)} (${c.count})</span>`).join('')}
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+        <div style="font-size:10.5px;color:var(--mut);margin-top:6px">No two courses in the same group share any student, so they're safe to combine in one classroom.</div>
+      </div>` : '';
+
+    return `<div class="card"><h3>${esc(sess.label)} • ${sess.date} • ${sess.startTime}-${sess.endTime}</h3>
+      ${termTabs}
+      ${comboTabs}
+      ${groupChips}
+      ${roomIds.map(rid => {
+        const room = state.rooms.find(r=>r.id===rid); if(!room) return '';
+        const seats = ss.filter(s=>s.roomId===rid);
+        const cIds = [...new Set(seats.map(s=>s.courseId))];
+
+        // Use the full physical room grid for manual editing. Auto seating may
+        // use fewer rows when Seats per Column is set lower.
+        const maxCol = Math.max(...seats.map(s=>s.col), room.cols);
+        const displayRows = Math.max(1, room.rows || seatsPerCol);
+
+        // Build colour legend including gap columns labelled as separator
+        // Find which columns are gap (no seat assigned in entire column)
+        const occupiedCols = new Set(seats.map(s=>s.col));
+        const allCols = Array.from({length:maxCol},(_,i)=>i+1);
+        const gapCols = new Set(allCols.filter(c=>!occupiedCols.has(c)));
+
+        return `<div class="section-room">
+          <h4>${esc(room.name)} -- ${room.cols} cols × ${room.rows} rows</h4>
+          <div class="legend" style="margin-bottom:10px">
+            ${cIds.map(cid => { const c = state.courses.find(x=>x.id===cid); return c?`<span class="lg ${courseColor.get(cid)}" title="${esc(c.title||'')}">${esc(c.title?c.title+' -- ':'')}${esc(c.code)} ${esc(c.section)}</span>`:'';}).join('')}
+            <span class="lg" style="background:#f1f5f9;color:#64748b;border:1px dashed #cbd5e1">-- gap col</span>
+          </div>
+          <div style="overflow-x:auto">
+            <div class="seat-grid" style="grid-template-columns:repeat(${maxCol},minmax(54px,1fr));width:max-content;min-width:100%">
+              ${allCols.map(ci => {
+                 const isGap = gapCols.has(ci);
+                 const colSeats = seats.filter(s=>s.col===ci);
+                 const colCourseId = colSeats[0]?.courseId;
+                 const colCourse = colCourseId ? state.courses.find(x=>x.id===colCourseId) : null;
+                 const colDropAttrs = `ondragover="allowSeatDrop(event)" ondragenter="seatDragEnter(event)" ondragleave="seatDragLeave(event)" ondrop="dropColumnOnTarget(event)" data-drop-session="${sess.id}" data-drop-room="${rid}" data-drop-col="${ci}"`;
+                 return `<div class="seat-col-header ${isGap?'':(courseColor.get(colCourseId)||'')}" draggable="true"
+                   ondragstart='startColumnDrag(event,${JSON.stringify({sessionId:sess.id,roomId:rid,col:ci})})'
+                   ${colDropAttrs}
+                   title="Drag to move or swap this whole column (${colSeats.length} student${colSeats.length===1?'':'s'}) with any other column, in this room or another room">
+                   ${isGap ? '· gap ·' : `<span style="display:block;font-size:8px;font-weight:700;line-height:1.2">${esc(colCourse?colCourse.title:'')}</span>⠿ ${esc(colCourse?colCourse.code:('Col '+ci))} (${colSeats.length})`}
+                 </div>`;
+              }).join('')}
+              ${Array.from({length:displayRows}).flatMap((_,ri) =>
+                 allCols.map(ci => {
+                   const dropAttrs = `ondragover="allowSeatDrop(event)" ondragenter="seatDragEnter(event)" ondragleave="seatDragLeave(event)" ondrop="dropSeatStudent(event)" data-drop-session="${sess.id}" data-drop-room="${rid}" data-drop-row="${ri+1}" data-drop-col="${ci}"`;
+                   if(gapCols.has(ci)){
+                     // Keep the visual separator, but make every physical cell
+                     // a valid manual drop target.
+                     return `<div class="seat empty manual-drop-slot" ${dropAttrs}
+                       style="background:repeating-linear-gradient(45deg,#f8fafc,#f8fafc 4px,#e2e8f0 4px,#e2e8f0 8px);border:1px dashed #cbd5e1;color:#94a3b8;font-size:7px"
+                       title="Empty manual drop slot${ri===0?' / separator column':''}">${ri===0?'|':''}</div>`;
+                   }
+                  const seat = seats.find(s=>s.row===ri+1 && s.col===ci);
+                   if(!seat) return `<div class="seat empty manual-drop-slot" ${dropAttrs} style="min-height:42px" title="Empty slot — drop a parked student here">+</div>`;
+                  const stu = state.students.find(x=>x.id===seat.studentId);
+                  const c = state.courses.find(x=>x.id===seat.courseId);
+                   const seatKey=dragSelectionKey(seat);
+                   return `<div class="seat ${courseColor.get(seat.courseId)} ${seat.manual?'manual-seat':''} ${_justPlacedSeatKeys.has(`${sess.id}|${rid}|${ri+1}|${ci}`)?'just-placed':''}" draggable="true"
+                     ondragstart='startSeatedStudentDrag(event,${JSON.stringify({sessionId:seat.sessionId,roomId:seat.roomId,row:seat.row,col:seat.col,studentId:seat.studentId,courseId:seat.courseId})})'
+                     style="min-height:42px" title="${esc(stu?stu.name+' · ID: '+stu.rollNo:seat.studentId)} -- ${esc(c?c.code:'')}${seat.manual?' -- MANUAL':''}">
+                     <input type="checkbox" class="seat-select" onclick="toggleDragSelection(event,'seat','${seatKey}',this.checked)" aria-label="Select ${esc(stu?.name||seat.studentId)}">
+                     <span style="font-size:6px;font-weight:700;color:inherit;opacity:.9;line-height:1.1;display:block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(c?c.title:'')}">${esc(c?c.title:'')}</span>
+                     <span style="font-size:6px;color:inherit;opacity:.75">${esc(c?c.code:'')}</span>
+                     <span class="seat-student-name">${esc(stu?stu.name:seat.studentId.slice(-8))}</span>
+                     <span style="font-family:monospace;font-size:6px">ID: ${esc(stu?stu.rollNo:seat.studentId)}</span>
+                  </div>`;
+                })
+              ).join('')}
+            </div>
+          </div>
+        </div>`;
+      }).join('')}</div>`;
+   }).join('');
+  _justPlacedSeatKeys.clear();
+  restoreScroll();
+}
+
+/* ================= MANUAL CLASH SEATING + STUDENT PARK ================= */
+let _dragSeatStudentId = null;
+let _dragSeatPayload = null;
+let _dragViewport = null;
+const _selectedDragKeys = new Set();
+// Seats that were just filled by a drag/drop -- flashed briefly on the next
+// render so it's visually obvious the course landed, then cleared so the
+// flash doesn't replay on unrelated re-renders.
+let _justPlacedSeatKeys = new Set();
+function markJustPlaced(sessionId, roomId, row, col){ _justPlacedSeatKeys.add(`${sessionId}|${roomId}|${row}|${col}`); }
+function captureDragViewport(){
+  const v=document.getElementById('seatingView');
+  const parkSidebar=document.getElementById('studentParkSidebar');
+  _dragViewport={
+    x:window.scrollX,
+    y:window.scrollY,
+    parkScrollTop:parkSidebar ? parkSidebar.scrollTop : 0,
+    roomScrollLeft:v
+      ? [...v.querySelectorAll('.section-room > div[style*="overflow-x:auto"]')].map(el=>el.scrollLeft)
+      : []
+  };
+}
+function dragSelectionKey(entry){
+  return `${entry.sessionId}|${entry.studentId}|${entry.courseId}`;
+}
+function toggleDragSelection(ev, kind, value, checked){
+  ev.stopPropagation();
+  const key=kind==='seat' ? `seat|${value}` : `${kind}|${value}`;
+  if(kind==='clashcourse'){
+    if(checked){
+      // Checking any one course chip selects every student clashing on
+      // that same course, in one step -- same as clicking the course code
+      // directly. (This also clears any other course's selection, so a
+      // drag only ever carries one course.)
+      const parts=value.split('|');
+      selectCourseForAllStudents(parts[0], parts.slice(2).join('|'));
+    }else{
+      // Unchecking only ever drops that one student -- it never touches
+      // the rest of the group selection.
+      _selectedDragKeys.delete(key);
+    }
+    return;
+  }
+  if(checked) _selectedDragKeys.add(key); else _selectedDragKeys.delete(key);
+}
+// Select one course for every clashing student in a session with a single
+// click, so they can all be dragged to the Student Park together. Enforces
+// the same one-course-per-drag rule as individual chip checkboxes.
+function selectCourseForAllStudents(sessionId, courseId){
+  document.querySelectorAll('input[data-kind="clashcourse"]').forEach(cb=>{
+    const key=`clashcourse|${cb.dataset.key}`;
+    if(cb.dataset.course===courseId && cb.dataset.session===sessionId){
+      cb.checked=true;
+      _selectedDragKeys.add(key);
+    }else{
+      cb.checked=false;
+      _selectedDragKeys.delete(key);
+    }
+  });
+  const c=state.courses.find(x=>x.id===courseId);
+  const n=document.querySelectorAll(`input[data-kind="clashcourse"][data-course="${CSS.escape(courseId)}"][data-session="${CSS.escape(sessionId)}"]`).length;
+  toast(`${n} student${n===1?'':'s'} selected for ${c?c.code:courseId} -- drag any highlighted card to the Student Park`,'ok');
+}
+function clearDragSelection(){
+  _selectedDragKeys.clear();
+  document.querySelectorAll('.park-select,.seat-select').forEach(x=>x.checked=false);
+}
+function startClashStudentDrag(ev, studentId){
+  captureDragViewport();
+  _dragSeatStudentId = studentId;
+  // Individually-checked course chips (finer-grained than the whole-student
+  // checkbox) take priority when the card being dragged has at least one of
+  // its own courses checked -- lets you park just one specific clashing
+  // course for a student instead of all of them.
+  const clashCourseEntries=[..._selectedDragKeys].filter(k=>k.startsWith('clashcourse|')).map(k=>{
+    const parts=k.slice('clashcourse|'.length).split('|');
+    return {sessionId:parts[0], studentId:parts[1], courseId:parts.slice(2).join('|')};
+  });
+  const ownCourseSelected=clashCourseEntries.some(e=>e.studentId===studentId);
+  let studentIds, courseEntries;
+  if(ownCourseSelected){
+    courseEntries=clashCourseEntries;
+    studentIds=[...new Set(courseEntries.map(e=>e.studentId))];
+  }else if(_selectedDragKeys.has(`clash|${studentId}`)){
+    studentIds=[..._selectedDragKeys].filter(k=>k.startsWith('clash|')).map(k=>k.slice(6));
+    courseEntries=studentIds.flatMap(sid=>courseClashOptions(sid).map(o=>({sessionId:o.session.id,studentId:sid,courseId:o.course.id})));
+  }else{
+    studentIds=[studentId];
+    courseEntries=courseClashOptions(studentId).map(o=>({sessionId:o.session.id,studentId,courseId:o.course.id}));
+  }
+  _dragSeatPayload = {type:'clash',studentId,studentIds,courseEntries};
+  try{ ev.dataTransfer.effectAllowed='move'; ev.dataTransfer.setData('text/plain', JSON.stringify(_dragSeatPayload)); }catch(e){}
+}
+function startSeatedStudentDrag(ev, seat){
+  captureDragViewport();
+  const key=dragSelectionKey(seat);
+  const selectedSeats=_selectedDragKeys.has(`seat|${key}`)
+    ? [..._selectedDragKeys].filter(k=>k.startsWith('seat|')).map(k=>k.slice(5))
+      .map(k=>k.split('|')).map(parts=>({sessionId:parts[0],studentId:parts[1],courseId:parts.slice(2).join('|')}))
+      .filter(x=>x.sessionId===seat.sessionId)
+      .map(x=>state.seating.find(s=>s.sessionId===x.sessionId&&s.studentId===x.studentId&&s.courseId===x.courseId)).filter(Boolean)
+    : [seat];
+  _dragSeatPayload = {type:'seat',...seat,entries:selectedSeats};
+  try{ ev.dataTransfer.effectAllowed='move'; ev.dataTransfer.setData('text/plain', JSON.stringify(_dragSeatPayload)); }catch(e){}
+}
+function startParkedStudentDrag(ev, entry){
+  captureDragViewport();
+  const key=dragSelectionKey(entry);
+  const selectedEntries=_selectedDragKeys.has(`park|${key}`)
+    ? (state.parkedStudents||[]).filter(p=>_selectedDragKeys.has(`park|${dragSelectionKey(p)}`))
+    : [entry];
+  _dragSeatPayload = {type:'parked',...entry,entries:selectedEntries};
+  try{ ev.dataTransfer.effectAllowed='move'; ev.dataTransfer.setData('text/plain', JSON.stringify(_dragSeatPayload)); }catch(e){}
+}
+function readSeatDragPayload(ev){
+  if(_dragSeatPayload) return _dragSeatPayload;
+  try{
+    const raw=ev.dataTransfer?.getData('text/plain');
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  return _dragSeatStudentId ? {type:'clash',studentId:_dragSeatStudentId} : null;
+}
+function clearDragState(){
+  _dragSeatStudentId=null;
+  _dragSeatPayload=null;
+  _dragViewport=null;
+}
+function allowSeatDrop(ev){ ev.preventDefault(); try{ev.dataTransfer.dropEffect='move';}catch(e){} }
+function seatDragEnter(ev){ ev.preventDefault(); ev.currentTarget.classList.add('drop-ready'); }
+function seatDragLeave(ev){ ev.currentTarget.classList.remove('drop-ready'); }
+function clearSeatDropHighlights(){ document.querySelectorAll('.seat.drop-ready').forEach(x=>x.classList.remove('drop-ready')); }
+function allowParkDrop(ev){ ev.preventDefault(); try{ev.dataTransfer.dropEffect='move';}catch(e){} }
+function parkDragEnter(ev){ ev.preventDefault(); ev.currentTarget.classList.add('park-drop-ready'); }
+function parkDragLeave(ev){ ev.currentTarget.classList.remove('park-drop-ready'); }
+function clearParkDropHighlights(){ document.querySelectorAll('.student-park-panel.park-drop-ready').forEach(x=>x.classList.remove('park-drop-ready')); }
+let _parkSessionId = null;
+function parkSessionCandidates(){
+  return state.sessions.filter(sess =>
+    state.scheduled.some(sc=>sc.sessionId===sess.id) ||
+    (state.parkedStudents||[]).some(p=>p.sessionId===sess.id)
+  );
+}
+function removeFromPark(sessionId, studentId, courseId){
+  const st=state.students.find(x=>x.id===studentId), c=state.courses.find(x=>x.id===courseId);
+  const label=`${st?st.name:studentId} — ${c?c.code:courseId}`;
+  if(!confirm(`Remove ${label} from the Student Park? (This does not seat them -- it just un-parks this one entry.)`)) return;
+  const before=(state.parkedStudents||[]).length;
+  state.parkedStudents=(state.parkedStudents||[]).filter(p=>!(p.sessionId===sessionId&&p.studentId===studentId&&p.courseId===courseId));
+  if((state.parkedStudents||[]).length===before){ toast('That entry was already removed','warn'); return; }
+  save(); renderSeating();
+  toast(`Removed ${label} from the Student Park`,'ok');
+}
+function parkedStudentCardHTML(p){
+  const st=state.students.find(x=>x.id===p.studentId), c=state.courses.find(x=>x.id===p.courseId);
+  const key=dragSelectionKey(p);
+  return `<div class="park-student-card" draggable="true"
+    ondragstart='startParkedStudentDrag(event,${JSON.stringify({sessionId:p.sessionId,studentId:p.studentId,courseId:p.courseId})})'
+    title="Drag this parked student to an empty room slot">
+    <div class="park-name" style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+      <span><input type="checkbox" class="park-select" onclick="toggleDragSelection(event,'park','${key}',this.checked)"> ${esc(st?.name||p.studentId)}</span>
+      <button type="button" title="Remove just this entry from the Student Park"
+        onclick="event.stopPropagation();removeFromPark('${esc(p.sessionId)}','${esc(p.studentId)}','${esc(p.courseId)}')"
+        style="background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;border-radius:50%;width:16px;height:16px;line-height:12px;font-size:10px;cursor:pointer;padding:0;font-weight:bold;flex:none">✕</button>
+    </div>
+    <div class="park-meta">ID: ${esc(st?.rollNo||p.studentId)} · ${esc(c?.code||p.courseId)} · Drag selected</div>
+  </div>`;
+}
+function renderStudentParkSidebar(){
+  const el=document.getElementById('studentParkSidebar'); if(!el) return;
+  const savedScrollX=window.scrollX, savedScrollY=window.scrollY;
+  const sessions=parkSessionCandidates();
+  if(!sessions.length){
+    el.innerHTML=`<div class="student-park-panel"><div class="student-park-title"><span>🅿️ Student Park</span><span class="badge">0</span></div><div class="student-park-help">Generate seating to activate the park. It will stay visible on the left while you scroll.</div></div>`;
+    requestAnimationFrame(()=>window.scrollTo(savedScrollX,savedScrollY));
+    return;
+  }
+  if(!_parkSessionId || !sessions.some(s=>s.id===_parkSessionId)) _parkSessionId=sessions[0].id;
+  const selected=sessions.find(s=>s.id===_parkSessionId)||sessions[0];
+  const parkedForSession=(state.parkedStudents||[]).filter(p=>p.sessionId===selected.id);
+  const totalParked=(state.parkedStudents||[]).length;
+  el.innerHTML=`<div class="student-park-panel"
+    ondragover="allowParkDrop(event)"
+    ondragenter="parkDragEnter(event)"
+    ondragleave="parkDragLeave(event)"
+    ondrop="dropToStudentPark(event,'${selected.id}')">
+    <div class="student-park-title"><span>🅿️ Student Park</span><span class="badge" style="background:#ede9fe;color:#6d28d9">${totalParked} total</span></div>
+    <div class="student-park-help">This panel stays visible while you scroll. Select a session, then drag clash students or seated students here. Multiple students can be parked.</div>
+    <select class="student-park-session" onchange="_parkSessionId=this.value;renderStudentParkSidebar()"
+      aria-label="Student Park target session">
+      ${sessions.map(s=>`<option value="${s.id}" ${s.id===selected.id?'selected':''}>${esc(s.label)} · ${esc(s.date)} · ${(state.parkedStudents||[]).filter(p=>p.sessionId===s.id).length} parked</option>`).join('')}
+    </select>
+    <div class="student-park-help" style="margin-top:2px">Drop zone: <b>${esc(selected.label)} · ${esc(selected.date)}</b></div>
+    <div class="park-list">${parkedForSession.length
+      ? parkedForSession.map(parkedStudentCardHTML).join('')
+      : '<div class="park-empty">Drop one or more student names here to park them temporarily.</div>'}</div>
+  </div>`;
+  requestAnimationFrame(()=>window.scrollTo(savedScrollX,savedScrollY));
+}
+function courseClashOptions(studentId){
+  const out=[];
+  state.scheduled.forEach(sc=>{
+    if(!studentsOf(sc.courseId).includes(studentId)) return;
+    const sess=state.sessions.find(s=>s.id===sc.sessionId), c=state.courses.find(x=>x.id===sc.courseId);
+    if(sess&&c) out.push({course:c,session:sess});
+  });
+  return out;
+}
+function assignManualClashSeat(studentId, sessionId, roomId, row, col, preferredCourseId){
+  const st=state.students.find(x=>x.id===studentId); if(!st){toast('Student not found','err');return;}
+  const sess=state.sessions.find(x=>x.id===sessionId), room=state.rooms.find(x=>x.id===roomId); if(!sess||!room)return;
+  const options=courseClashOptions(studentId).filter(o=>o.session.id===sessionId);
+  if(!options.length){toast('This student is not enrolled in a course scheduled in this session','warn');return;}
+  let chosen=options[0].course;
+  const preferredMatch=preferredCourseId ? options.find(o=>o.course.id===preferredCourseId) : null;
+  if(preferredMatch){
+    chosen=preferredMatch.course;
+  }else if(options.length>1){
+    const menu=options.map((o,i)=>`${i+1}. ${o.course.code} — ${o.course.title}`).join('\\n');
+    const ans=prompt(`Choose the course to assign to ${st.name}:\\n${menu}\\n\\nEnter course number:`);
+    const idx=parseInt(ans,10)-1; if(!Number.isInteger(idx)||!options[idx]){toast('Manual placement cancelled','warn');return;}
+    chosen=options[idx].course;
+  }
+  const existing=state.seating.find(x=>x.sessionId===sessionId&&x.roomId===roomId&&x.row===row&&x.col===col);
+  if(existing){toast('That seat is already occupied','warn');return;}
+  state.seating=state.seating.filter(x=>!(x.studentId===studentId&&x.sessionId===sessionId));
+  const ov={sessionId,roomId,row,col,studentId,courseId:chosen.id};
+  state.manualSeatOverrides=Array.isArray(state.manualSeatOverrides)?state.manualSeatOverrides:[];
+  state.manualSeatOverrides=state.manualSeatOverrides.filter(x=>!(x.studentId===studentId&&x.sessionId===sessionId));
+  state.manualSeatOverrides.push(ov);
+  state.seating.push({...ov,manual:true});
+  ensureScheduled(sessionId, chosen.id);
+  markJustPlaced(sessionId, roomId, row, col);
+  save(); renderSeating();
+  toast(`✓ ${st.name} assigned to ${chosen.code} at ${room.name}, Row ${row}, Column ${col}`,'ok');
+}
+function addStudentToPark(sessionId, studentId, courseId){
+  state.parkedStudents=Array.isArray(state.parkedStudents)?state.parkedStudents:[];
+  if(!state.parkedStudents.some(p=>p.sessionId===sessionId&&p.studentId===studentId&&p.courseId===courseId)){
+    state.parkedStudents.push({sessionId,studentId,courseId});
+    return true;
+  }
+  return false;
+}
+function parkSeatedStudents(entries, sessionId){
+  const candidates=(entries||[]).filter(seat=>seat.sessionId===sessionId);
+  let added=0;
+  candidates.forEach(seat=>{
+    const existing=state.seating.find(x=>x.sessionId===seat.sessionId&&x.studentId===seat.studentId&&x.courseId===seat.courseId);
+    if(!existing) return;
+    state.seating=state.seating.filter(x=>!(x.sessionId===seat.sessionId&&x.studentId===seat.studentId&&x.courseId===seat.courseId));
+    state.manualSeatOverrides=(Array.isArray(state.manualSeatOverrides)?state.manualSeatOverrides:[])
+      .filter(x=>!(x.sessionId===seat.sessionId&&x.studentId===seat.studentId&&x.courseId===seat.courseId));
+    if(addStudentToPark(seat.sessionId,seat.studentId,seat.courseId)) added++;
+  });
+  if(!added){toast('Selected student is already parked or no longer seated','warn');return;}
+  save(); renderSeating();
+  clearDragSelection();
+  toast(`${added} student${added===1?'':'s'} moved to Student Park`,'ok');
+}
+function dropToStudentPark(ev, sessionId){
+  ev.preventDefault();
+  clearParkDropHighlights(); clearSeatDropHighlights();
+  const p=readSeatDragPayload(ev); if(!p) return;
+  if(p.type==='seat'){
+    if(p.sessionId!==sessionId){toast('Drag the student to the park for the same exam session','warn');clearDragState();return;}
+    parkSeatedStudents(p.entries||[p],sessionId);
+  }else if(p.type==='clash'){
+    let added=0;
+    const skipped=[];
+    if(p.courseEntries && p.courseEntries.length){
+      // Specific (session, student, course) entries were individually
+      // checked -- park exactly those, not every clashing course.
+      p.courseEntries.filter(e=>e.sessionId===sessionId)
+        .forEach(e=>{ if(addStudentToPark(sessionId,e.studentId,e.courseId)) added++; else skipped.push(e); });
+    }else{
+      const ids=p.studentIds||[p.studentId];
+      ids.forEach(studentId=>{
+        courseClashOptions(studentId).filter(o=>o.session.id===sessionId)
+          .forEach(o=>{if(addStudentToPark(sessionId,studentId,o.course.id)) added++; else skipped.push({studentId,courseId:o.course.id});});
+      });
+    }
+    if(!added){
+      // Name exactly what's already parked so it's obvious what to remove
+      // (via the ✕ on its Student Park card) instead of a generic error.
+      const names=skipped.slice(0,3).map(e=>{
+        const st=state.students.find(x=>x.id===e.studentId), c=state.courses.find(x=>x.id===e.courseId);
+        return `${st?st.name:e.studentId} (${c?c.code:e.courseId})`;
+      }).join(', ');
+      const extra=skipped.length>3?` +${skipped.length-3} more`:'';
+      toast(skipped.length ? `Already parked: ${names}${extra}` : 'Selected students have no exam in this session','warn');
+      clearDragSelection();clearDragState();return;
+    }
+    save(); renderSeating();
+    clearDragSelection();
+    toast(`${added} exam entr${added===1?'y':'ies'} parked`,'ok');
+  }
+  clearDragState();
+}
+// Ensure a (session, course) pairing exists in state.scheduled. Manual seating
+// paths (e.g. dragging a parked/unscheduled paper straight onto a seat) create
+// real seats without ever going through Auto Schedule, so every report that
+// lists a session's exams via state.scheduled would otherwise never see them.
+// Called wherever a seat is manually created for a course; a no-op if the
+// course was already scheduled (the normal Auto Schedule path).
+function ensureScheduled(sessionId, courseId){
+  if(!state.scheduled.some(sc=>sc.sessionId===sessionId && sc.courseId===courseId)){
+    state.scheduled.push({id:uid(), sessionId, courseId});
+    return true;
+  }
+  return false;
+}
+function assignParkedStudents(entries, sessionId, roomId, row, col){
+  const candidates=(entries||[]).filter(entry=>entry.sessionId===sessionId &&
+    (state.parkedStudents||[]).some(p=>p.sessionId===entry.sessionId&&p.studentId===entry.studentId&&p.courseId===entry.courseId));
+  if(!candidates.length){toast('No selected parked students belong to this session','warn');return;}
+  const occupied=new Set(state.seating.filter(x=>x.sessionId===sessionId).map(x=>`${x.roomId}|${x.row}|${x.col}`));
+  const rooms=state.rooms.filter(r=>r.active!==false);
+  const slots=[];
+  const first=`${roomId}|${row}|${col}`;
+  if(!occupied.has(first)) slots.push({roomId,row,col});
+  rooms.forEach(room=>{
+    for(let r=1;r<=Math.max(1,room.rows||0);r++) for(let c=1;c<=Math.max(1,room.cols||0);c++){
+      const key=`${room.id}|${r}|${c}`;
+      if(!occupied.has(key) && key!==first) slots.push({roomId:room.id,row:r,col:c});
+    }
+  });
+  const count=Math.min(candidates.length,slots.length);
+  const placedDetails=[];
+  for(let i=0;i<count;i++){
+    const entry=candidates[i], slot=slots[i];
+    const ov={sessionId,roomId:slot.roomId,row:slot.row,col:slot.col,studentId:entry.studentId,courseId:entry.courseId};
+    state.seating=state.seating.filter(x=>!(x.studentId===entry.studentId&&x.courseId===entry.courseId&&x.sessionId===sessionId));
+    state.parkedStudents=(state.parkedStudents||[]).filter(p=>!(p.sessionId===sessionId&&p.studentId===entry.studentId&&p.courseId===entry.courseId));
+    state.manualSeatOverrides=(Array.isArray(state.manualSeatOverrides)?state.manualSeatOverrides:[])
+      .filter(x=>!(x.sessionId===sessionId&&x.studentId===entry.studentId&&x.courseId===entry.courseId));
+    state.manualSeatOverrides.push(ov);
+    state.seating.push({...ov,manual:true});
+    ensureScheduled(sessionId, entry.courseId);
+    occupied.add(`${slot.roomId}|${slot.row}|${slot.col}`);
+    markJustPlaced(sessionId, slot.roomId, slot.row, slot.col);
+    // Confirm exactly which course landed where, not just a headcount --
+    // same style of confirmation assignManualClashSeat already gives.
+    const st=state.students.find(x=>x.id===entry.studentId);
+    const c=state.courses.find(x=>x.id===entry.courseId);
+    const rm=state.rooms.find(x=>x.id===slot.roomId);
+    placedDetails.push(`${esc(st?st.name:entry.studentId)} → ${esc(c?c.code:entry.courseId)} @ ${esc(rm?rm.name:slot.roomId)} R${slot.row}C${slot.col}`);
+  }
+  save(); renderSeating();
+  clearDragSelection();
+  if(count<candidates.length){
+    toast(`${count} placed; ${candidates.length-count} need more empty room slots`,'warn');
+  }else{
+    const summary = placedDetails.length<=3 ? placedDetails.join('; ') : `${placedDetails.slice(0,3).join('; ')} +${placedDetails.length-3} more`;
+    toast(`✓ Course placed — ${summary}`,'ok');
+  }
+}
+function moveSeatedStudentSeat(source, sessionId, roomId, row, col){
+  if(source.sessionId!==sessionId){toast('A student can only be moved within the same session','warn');return;}
+  const existing=state.seating.find(x=>x.sessionId===sessionId&&x.roomId===roomId&&x.row===row&&x.col===col);
+  if(existing){toast('That slot is already occupied','warn');return;}
+  const sourceSeat=state.seating.find(x=>x.sessionId===source.sessionId&&x.roomId===source.roomId&&x.row===source.row&&x.col===source.col);
+  if(!sourceSeat){toast('That seat is no longer occupied','warn');return;}
+  state.seating=state.seating.filter(x=>!(x.sessionId===source.sessionId&&x.studentId===source.studentId&&x.courseId===source.courseId));
+  const ov={sessionId,roomId,row,col,studentId:source.studentId,courseId:source.courseId};
+  state.manualSeatOverrides=(Array.isArray(state.manualSeatOverrides)?state.manualSeatOverrides:[])
+    .filter(x=>!(x.sessionId===sessionId&&x.studentId===source.studentId&&x.courseId===source.courseId));
+  state.manualSeatOverrides.push(ov);
+  state.seating.push({...ov,manual:true});
+  ensureScheduled(sessionId, source.courseId);
+  markJustPlaced(sessionId, roomId, row, col);
+  save(); renderSeating();
+  const st=state.students.find(x=>x.id===source.studentId);
+  const c=state.courses.find(x=>x.id===source.courseId);
+  const rm=state.rooms.find(x=>x.id===roomId);
+  toast(`✓ Course placed — ${esc(st?st.name:source.studentId)} → ${esc(c?c.code:source.courseId)} @ ${esc(rm?rm.name:roomId)} R${row}C${col}`,'ok');
+}
+function dropSeatStudent(ev){
+  ev.preventDefault();
+  clearSeatDropHighlights(); clearParkDropHighlights();
+  const p=readSeatDragPayload(ev); if(!p) return;
+  const t=ev.currentTarget;
+  if(p.type==='parked') assignParkedStudents(p.entries||[p],t.dataset.dropSession,t.dataset.dropRoom,+t.dataset.dropRow,+t.dataset.dropCol);
+  else if(p.type==='seat') moveSeatedStudentSeat(p,t.dataset.dropSession,t.dataset.dropRoom,+t.dataset.dropRow,+t.dataset.dropCol);
+  else if(p.type==='clash'){
+    // If a specific course chip was checked for this session, use it
+    // directly instead of prompting which course to seat.
+    const preferred=(p.courseEntries||[]).find(e=>e.sessionId===t.dataset.dropSession && e.studentId===p.studentId);
+    assignManualClashSeat(p.studentId,t.dataset.dropSession,t.dataset.dropRoom,+t.dataset.dropRow,+t.dataset.dropCol,preferred?preferred.courseId:null);
+  }
+  clearDragState();
+}
+function dropClashStudent(ev){
+  dropSeatStudent(ev);
+}
+/* ================= COLUMN DRAG (move/swap a whole column) ================= */
+function startColumnDrag(ev, payload){
+  captureDragViewport();
+  _dragSeatPayload = {type:'column', sessionId:payload.sessionId, roomId:payload.roomId, col:payload.col};
+  try{ ev.dataTransfer.effectAllowed='move'; ev.dataTransfer.setData('text/plain', JSON.stringify(_dragSeatPayload)); }catch(e){}
+}
+function dropColumnOnTarget(ev){
+  ev.preventDefault();
+  clearSeatDropHighlights(); clearParkDropHighlights();
+  const p = readSeatDragPayload(ev);
+  if(!p || p.type!=='column'){
+    if(p) toast('Drop a column header onto another column header to move/swap it','warn');
+    clearDragState();
+    return;
+  }
+  const t = ev.currentTarget;
+  moveColumn(p.sessionId, p.roomId, p.col, t.dataset.dropSession, t.dataset.dropRoom, +t.dataset.dropCol);
+  clearDragState();
+}
+// Moves (or swaps, if the target column is occupied) an entire seated column
+// -- keeping the same row numbers -- into another column, either in the same
+// room or a different room. Anyone whose row number exceeds the destination
+// room's row count doesn't fit and is sent to the Student Park instead of
+// being silently dropped.
+function moveColumn(sourceSessionId, sourceRoomId, sourceCol, targetSessionId, targetRoomId, targetCol){
+  if(sourceSessionId!==targetSessionId){ toast('Columns can only be moved within the same session','warn'); return; }
+  if(sourceRoomId===targetRoomId && sourceCol===targetCol) return;
+  const sourceRoom = state.rooms.find(r=>r.id===sourceRoomId);
+  const targetRoom = state.rooms.find(r=>r.id===targetRoomId);
+  if(!sourceRoom || !targetRoom){ toast('Room not found','err'); return; }
+  const sourceSeats = state.seating.filter(s=>s.sessionId===sourceSessionId && s.roomId===sourceRoomId && s.col===sourceCol);
+  const targetSeats = state.seating.filter(s=>s.sessionId===targetSessionId && s.roomId===targetRoomId && s.col===targetCol);
+  if(!sourceSeats.length && !targetSeats.length){ toast('Both columns are empty -- nothing to move','warn'); return; }
+
+  // Pull both columns out first.
+  state.seating = state.seating.filter(s=>
+    !(s.sessionId===sourceSessionId && s.roomId===sourceRoomId && s.col===sourceCol) &&
+    !(s.sessionId===targetSessionId && s.roomId===targetRoomId && s.col===targetCol));
+  const sourceKeys = new Set(sourceSeats.map(s=>`${s.studentId}|${s.courseId}`));
+  const targetKeys = new Set(targetSeats.map(s=>`${s.studentId}|${s.courseId}`));
+  state.manualSeatOverrides = (Array.isArray(state.manualSeatOverrides)?state.manualSeatOverrides:[]).filter(o=>{
+    if(o.sessionId===sourceSessionId && sourceKeys.has(`${o.studentId}|${o.courseId}`)) return false;
+    if(o.sessionId===targetSessionId && targetKeys.has(`${o.studentId}|${o.courseId}`)) return false;
+    return true;
+  });
+
+  let parkedCount = 0;
+  const placeInto = (seatsFromOtherCol, destSessionId, destRoomId, destCol, destRoomObj) => {
+    seatsFromOtherCol.forEach(seat => {
+      if(seat.row > (destRoomObj.rows||0)){
+        state.parkedStudents = Array.isArray(state.parkedStudents) ? state.parkedStudents : [];
+        state.parkedStudents.push({sessionId:destSessionId, studentId:seat.studentId, courseId:seat.courseId});
+        parkedCount++;
+        return;
+      }
+      const ov = {sessionId:destSessionId, roomId:destRoomId, row:seat.row, col:destCol, studentId:seat.studentId, courseId:seat.courseId};
+      state.manualSeatOverrides.push(ov);
+      state.seating.push({...ov, manual:true});
+      markJustPlaced(destSessionId, destRoomId, seat.row, destCol);
+    });
+  };
+  placeInto(sourceSeats, targetSessionId, targetRoomId, targetCol, targetRoom);
+  placeInto(targetSeats, sourceSessionId, sourceRoomId, sourceCol, sourceRoom);
+
+  save(); renderSeating();
+  let msg = sourceRoomId===targetRoomId
+    ? `✓ Swapped column ${sourceCol} ↔ column ${targetCol} in ${esc(sourceRoom.name)}`
+    : `✓ Moved column ${sourceCol} (${esc(sourceRoom.name)}) ↔ column ${targetCol} (${esc(targetRoom.name)})`;
+  msg += ` — ${sourceSeats.length+targetSeats.length} student${sourceSeats.length+targetSeats.length===1?'':'s'} affected`;
+  if(parkedCount) msg += `. ${parkedCount} didn't fit in the destination room and ${parkedCount===1?'was':'were'} sent to the Student Park`;
+  toast(msg, parkedCount ? 'warn' : 'ok');
+}
+/* ================= CLASH STUDENTS -- DOWNLOAD / UPLOAD SEATING SHEET ================= */
+// One row per (student, course) pair for every detected session clash --
+// Course/Day/Date/Time are pre-filled from the schedule, Room is left blank
+// for the user to type in before uploading it back with handleClashSeatingUpload.
+function downloadClashSeatingSheet(){
+  const scheduledBySession = new Map();
+  state.scheduled.forEach(sc=>{
+    if(!scheduledBySession.has(sc.sessionId)) scheduledBySession.set(sc.sessionId,[]);
+    scheduledBySession.get(sc.sessionId).push(sc.courseId);
+  });
+  const rows = [];
+  const sessionsSorted = [...state.sessions].sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.startTime||'').localeCompare(b.startTime||''));
+  sessionsSorted.forEach(sess=>{
+    const cids = scheduledBySession.get(sess.id)||[];
+    if(cids.length<2) return;
+    const seen = new Map();
+    cids.forEach(cid=>studentsOf(cid).forEach(sid=>{
+      if(!seen.has(sid)) seen.set(sid,[]);
+      seen.get(sid).push(cid);
+    }));
+    seen.forEach((courseIds,sid)=>{
+      if(courseIds.length<2) return;
+      const stu = state.students.find(x=>x.id===sid); if(!stu) return;
+      courseIds.forEach(cid=>{
+        const c = state.courses.find(x=>x.id===cid); if(!c) return;
+        rows.push({
+          'Roll No': stu.rollNo,
+          'Name': stu.name,
+          'Program': stu.program||'',
+          'Section': stu.section||'',
+          'Course Code': c.code,
+          'Course Title': c.title,
+          'Day': sess.day || dayName(sess.date),
+          'Date': sess.date,
+          'Time': `${sess.startTime}-${sess.endTime}`,
+          'Room (fill this in)': '',
+          'Student ID (do not edit)': stu.id,
+          'Course ID (do not edit)': c.id,
+          'Session ID (do not edit)': sess.id
+        });
+      });
+    });
+  });
+  if(!rows.length){ toast('No clash students detected -- nothing to download','warn'); return; }
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Clash Seating');
+  XLSX.writeFile(wb, 'clash-students-seating.xlsx');
+  toast(`Downloaded ${rows.length} clash row(s) -- fill in the Room column and upload it back to seat them`,'ok');
+}
+// Reads the sheet back, and for every row with a Room filled in, seats that
+// student/course/session at the first free slot in that room. Falls back to
+// matching by Roll No / Course Code / Date+Time if the hidden ID columns
+// were removed or edited, so a reasonably reformatted sheet still works.
+function handleClashSeatingUpload(e){
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    try{
+      const wb = XLSX.read(ev.target.result, {type:'array'});
+      const sn = wb.SheetNames[0];
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], {defval:''});
+      if(!rows.length){ toast('No rows found in the uploaded file','warn'); e.target.value=''; return; }
+      let placed=0, skipped=0;
+      const skipReasons=[];
+      rows.forEach((row,i)=>{
+        const roomName = String(row['Room (fill this in)']||row['Room']||'').trim();
+        if(!roomName) return; // left blank -- nothing to do for this row
+        const studentId = String(row['Student ID (do not edit)']||'').trim();
+        const courseId = String(row['Course ID (do not edit)']||'').trim();
+        const sessionId = String(row['Session ID (do not edit)']||'').trim();
+        let stu = studentId ? state.students.find(x=>x.id===studentId) : null;
+        let course = courseId ? state.courses.find(x=>x.id===courseId) : null;
+        let sess = sessionId ? state.sessions.find(x=>x.id===sessionId) : null;
+        if(!stu){ const roll=String(row['Roll No']||'').trim(); stu = state.students.find(x=>x.rollNo===roll); }
+        if(!course){ const code=String(row['Course Code']||'').trim(); course = state.courses.find(x=>x.code===code); }
+        if(!sess){
+          const date=String(row['Date']||'').trim();
+          const time=String(row['Time']||'').trim();
+          sess = state.sessions.find(x=>x.date===date && `${x.startTime}-${x.endTime}`===time);
+        }
+        const room = state.rooms.find(x=>x.name.toLowerCase()===roomName.toLowerCase());
+        if(!stu || !course || !sess || !room){
+          skipped++;
+          const why=[!stu&&'student not found',!course&&'course not found',!sess&&'session (day/date/time) not found',!room&&`room "${roomName}" not found`].filter(Boolean).join(', ');
+          skipReasons.push(`Row ${i+2}: ${why}`);
+          return;
+        }
+        const occupied = new Set(state.seating.filter(x=>x.sessionId===sess.id && x.roomId===room.id).map(x=>`${x.row}|${x.col}`));
+        let slot=null;
+        for(let c=1;c<=(room.cols||0) && !slot;c++){
+          for(let rI=1;rI<=(room.rows||0) && !slot;rI++){
+            const key=`${rI}|${c}`;
+            if(!occupied.has(key)) slot={row:rI,col:c};
+          }
+        }
+        if(!slot){ skipped++; skipReasons.push(`Row ${i+2}: ${esc(room.name)} has no free seats left for this session`); return; }
+        state.seating = state.seating.filter(x=>!(x.sessionId===sess.id && x.studentId===stu.id && x.courseId===course.id));
+        state.parkedStudents = (state.parkedStudents||[]).filter(p=>!(p.sessionId===sess.id && p.studentId===stu.id && p.courseId===course.id));
+        const ov = {sessionId:sess.id, roomId:room.id, row:slot.row, col:slot.col, studentId:stu.id, courseId:course.id};
+        state.manualSeatOverrides = (Array.isArray(state.manualSeatOverrides)?state.manualSeatOverrides:[])
+          .filter(x=>!(x.sessionId===sess.id && x.studentId===stu.id && x.courseId===course.id));
+        state.manualSeatOverrides.push(ov);
+        state.seating.push({...ov, manual:true});
+        markJustPlaced(sess.id, room.id, slot.row, slot.col);
+        placed++;
+      });
+      save(); renderSeating();
+      let msg = `✓ Seated ${placed} student${placed===1?'':'s'} from the uploaded sheet`;
+      if(skipped) msg += `; ${skipped} row(s) skipped`;
+      toast(msg, skipped ? 'warn' : 'ok');
+      if(skipReasons.length){
+        alert(`Some rows could not be placed:\n\n${skipReasons.slice(0,25).join('\n')}${skipReasons.length>25?`\n...and ${skipReasons.length-25} more`:''}`);
+      }
+    }catch(err){
+      console.error(err);
+      toast('Upload failed: '+err.message,'err');
+    }
+    e.target.value='';
+  };
+  r.readAsArrayBuffer(f);
+}
+function clearManualSeatOverrides(){
+  if(!confirm('Clear all manual seat placements and empty the Student Park?')) return;
+  state.manualSeatOverrides=[];
+  state.parkedStudents=[];
+  runSeating();
+  toast('Manual placements cleared','ok');
+}
+
+/* ================= CONFLICTS ================= */
+/* -- perf cache: rebuilt at the start of each detectConflicts/renderConflicts -- */
+let _confCache = null;
+function buildConfCache(){
+  const courseById = new Map(state.courses.map(c=>[c.id,c]));
+  const sessionById = new Map(state.sessions.map(s=>[s.id,s]));
+  const sessByDate = new Map();
+  state.sessions.forEach(s=>{ if(!sessByDate.has(s.date)) sessByDate.set(s.date,[]); sessByDate.get(s.date).push(s.id); });
+  const courseSessId = new Map();
+  const sessCourses = new Map();
+  state.scheduled.forEach(sc=>{
+    courseSessId.set(sc.courseId, sc.sessionId);
+    if(!sessCourses.has(sc.sessionId)) sessCourses.set(sc.sessionId,[]);
+    sessCourses.get(sc.sessionId).push(sc.courseId);
+  });
+  const sessCap = new Map();
+  for(const [sid, cids] of sessCourses){
+    let n=0; for(const cid of cids){ const c=courseById.get(cid); if(c) n+=c.studentCount||0; }
+    sessCap.set(sid,n);
+  }
+  const stuCourseCount = new Map();
+  state.students.forEach(st=>stuCourseCount.set(st.id,(st.courseIds||[]).length));
+  const studentSet = new Map();
+  for(const c of state.courses){ studentSet.set(c.id, new Set(studentsOf(c.id))); }
+  _confCache = { courseById, sessionById, sessByDate, courseSessId, sessCourses, sessCap, stuCourseCount, studentSet };
+}
+function invalidateConfCache(){ _confCache=null; }
+function sessionCapUsed(sessId){
+  return state.scheduled.filter(s=>s.sessionId===sessId)
+    .reduce((n,s)=>{const c=state.courses.find(x=>x.id===s.courseId);return n+(c?c.studentCount||0:0);},0);
+}
+function totalRoomCap(){
+  return state.rooms.filter(r=>r.active!==false).reduce((n,r)=>n+roomCapacity(r),0);
+}
+// Move a course from its current session to a new session (used by conflict fix buttons)
+function moveCourseToSession(courseId, newSessId){
+  const entry = state.scheduled.find(s=>s.courseId===courseId);
+  if(!entry){ toast('Course not in schedule','err'); return; }
+  const oldSessId = entry.sessionId;
+  entry.sessionId = newSessId;
+  // Clear any stale seating for this course
+  state.seating = state.seating.filter(s=>s.courseId!==courseId);
+  // Parked entries and manual seat overrides for this course were made
+  // against its OLD session. Once the course moves, "sessionId" on those
+  // records no longer matches where the course is actually scheduled, so
+  // they become orphaned -- dragging a (freshly-recomputed, new-session)
+  // clash card onto a Student Park still pinned to the old session then
+  // filters everything out and throws "no exam in this session". Drop the
+  // stale records rather than let them linger; the clash panel/park will
+  // regenerate correctly against the new session on next render.
+  state.parkedStudents = (state.parkedStudents||[]).filter(p=>p.courseId!==courseId);
+  state.manualSeatOverrides = (state.manualSeatOverrides||[]).filter(o=>o.courseId!==courseId);
+  // If the Student Park sidebar was pinned to this course's old session,
+  // follow the move so the next drag targets the session the course is
+  // actually in now, instead of silently staying stuck on the old one.
+  if(_parkSessionId===oldSessId) _parkSessionId=newSessId;
+  save(); render();
+  toast('Course moved -- re-run 🪑 Generate Seating to update room layout','ok');
+}
+
+/* ===== Predict the impact of moving a course to a target session ===== */
+function previewMoveImpact(courseId, newSessId){
+  if(!_confCache) buildConfCache();
+  const C = _confCache;
+  const course = C.courseById.get(courseId);
+  const newSess = C.sessionById.get(newSessId);
+  if(!course || !newSess) return null;
+  const capFor = (sid) => (C.stuCourseCount.get(sid)||0) >= 7 ? 2 : 1;
+  const stuIds = C.studentSet.get(courseId) || new Set();
+
+  // Courses already in target session (excluding this course if already there)
+  const targetCourseIds = (C.sessCourses.get(newSessId)||[]).filter(cid=>cid!==courseId);
+
+  // Same-session student clashes
+  let newClashes = 0;
+  const targetStus = new Set();
+  for(const cid of targetCourseIds){
+    const s = C.studentSet.get(cid); if(!s) continue;
+    for(const sid of s) targetStus.add(sid);
+  }
+  for(const sid of stuIds) if(targetStus.has(sid)) newClashes++;
+
+  // Faculty clash
+  let facClash = false;
+  if(course.faculty){
+    facClash = targetCourseIds.some(cid=>{
+      const c = C.courseById.get(cid);
+      return c && c.faculty && c.faculty === course.faculty;
+    });
+  }
+
+  // Daily overload on target date
+  const sameDateSessIds = (C.sessByDate.get(newSess.date)||[]).filter(id=>id!==newSessId);
+  const sameDateCourseIds = [];
+  for(const sid of sameDateSessIds){
+    const list = C.sessCourses.get(sid); if(!list) continue;
+    for(const cid of list) if(cid!==courseId) sameDateCourseIds.push(cid);
+  }
+
+  let overloads = 0, threeOnDay = 0, worstCap = 1;
+  for(const sid of stuIds){
+    let examsOnDate = 1;
+    for(const cid of sameDateCourseIds){
+      const ss = C.studentSet.get(cid);
+      if(ss && ss.has(sid)) examsOnDate++;
+    }
+    const cap = capFor(sid);
+    if(cap > worstCap) worstCap = cap;
+    if(examsOnDate > cap) overloads++;
+    if(examsOnDate >= 3) threeOnDay++;
+  }
+
+  return {
+    newClashes,
+    facClash, overloads, threeOnDay, maxPerDay: worstCap,
+    safe: newClashes===0 && !facClash && overloads===0
+  };
+}
+
+function impactBadge(imp){
+  if(!imp) return '';
+  if(imp.safe) return `<div style="font-size:9.5px;color:#15803d;margin-top:2px">✓ safe — no new clashes</div>`;
+  const bits = [];
+  if(imp.newClashes) bits.push(`⚠ ${imp.newClashes} student clash${imp.newClashes>1?'es':''}`);
+  if(imp.facClash)   bits.push(`⚠ faculty clash`);
+  if(imp.overloads)  bits.push(`⚠ ${imp.overloads} student${imp.overloads>1?'s':''} > ${imp.maxPerDay}/day${imp.threeOnDay?` (${imp.threeOnDay} would have 3+ exams that day)`:''}`);
+  return `<div style="font-size:9.5px;color:#b91c1c;margin-top:2px;font-weight:600">${bits.join(' · ')}</div>`;
+}
+
+function tryMoveCourse(courseId, newSessId, refreshSelectId){
+  const imp = previewMoveImpact(courseId, newSessId);
+  if(!imp){ toast('Invalid move','err'); return; }
+  if(!imp.safe){
+    const parts = [];
+    if(imp.newClashes) parts.push(`${imp.newClashes} student${imp.newClashes>1?'s':''} would have a same-session clash`);
+    if(imp.facClash)   parts.push(`faculty would teach two exams in this slot`);
+    if(imp.overloads)  parts.push(`${imp.overloads} student${imp.overloads>1?'s':''} would exceed ${imp.maxPerDay} exams/day` + (imp.threeOnDay?` (incl. ${imp.threeOnDay} with 3+ exams that day)`:''));
+    const ok = confirm(`⚠ This move will create:\n\n• ${parts.join('\n• ')}\n\nProceed anyway?`);
+    if(!ok){ if(refreshSelectId){ const el=document.getElementById(refreshSelectId); if(el) el.value=''; } return; }
+  }
+  moveCourseToSession(courseId, newSessId);
+}
+
+// Move ONE student out of a course in a clashing session into a standalone override slot
+// We do this by removing the student from their current enrollment record
+// and optionally noting an override. For clash resolution: unenroll the student from ONE of the two clashing courses.
+function unenrollStudentFromCourse(studentId, courseId){
+  const stu = state.students.find(x=>x.id===studentId);
+  if(!stu){ toast('Student not found','err'); return; }
+  stu.courseIds = (stu.courseIds||[]).filter(id=>id!==courseId);
+  // Also remove any existing seating entry for this student+course
+  state.seating = state.seating.filter(s=>!(s.studentId===studentId && s.courseId===courseId));
+  // Update course student count
+  const c = state.courses.find(x=>x.id===courseId);
+  if(c) c.studentCount = state.students.filter(s=>(s.courseIds||[]).includes(courseId)).length;
+  save(); render();
+  toast(`Student removed from ${c?.code||courseId}. Conflict should now be resolved.`,'ok');
+}
+// Assign an unscheduled course to a session
+function assignCourseToSession(courseId, sessId){
+  if(state.scheduled.find(s=>s.courseId===courseId)){
+    moveCourseToSession(courseId, sessId); return;
+  }
+  // Hard rule (matches the auto-scheduler): a faculty clash is NEVER allowed,
+  // no matter which button or path triggered this assignment.
+  const imp = previewMoveImpact(courseId, sessId);
+  if(imp && imp.facClash){
+    toast('⛔ Blocked -- this faculty already has an exam in that session. Pick a different slot.','err');
+    return;
+  }
+  if(imp && !imp.safe){
+    const parts = [];
+    if(imp.newClashes) parts.push(`${imp.newClashes} student${imp.newClashes>1?'s':''} would have a same-session clash`);
+    if(imp.overloads)  parts.push(`${imp.overloads} student${imp.overloads>1?'s':''} would exceed ${imp.maxPerDay} exams/day` + (imp.threeOnDay?` (incl. ${imp.threeOnDay} with 3+ exams that day)`:''));
+    if(parts.length){
+      const ok = confirm(`⚠ This will create:\n\n• ${parts.join('\n• ')}\n\nProceed anyway?`);
+      if(!ok) return;
+    }
+  }
+  state.scheduled.push({id:uid(), sessionId:sessId, courseId});
+  save(); render();
+  toast('Course scheduled -- re-run 🪑 Generate Seating','ok');
+}
+
+/* Move overflow students from a crowded room into a chosen target room.
+   Picks the last N seats (overflow count) from the source room and re-assigns
+   them to the target room, placing them starting from the next available row/col. */
+function parkOverflowInRoom(sessId, fromRoomId, toRoomId){
+  const toRoom = state.rooms.find(r=>r.id===toRoomId);
+  const fromRoom = state.rooms.find(r=>r.id===fromRoomId);
+  if(!toRoom || !fromRoom){ toast('Room not found','err'); return; }
+
+  // All seating entries in the source room for this session, sorted last-first
+  const fromSeats = state.seating.filter(s=>s.sessionId===sessId && s.roomId===fromRoomId);
+  const fromCap = roomCapacity(fromRoom);
+  const overflow = fromSeats.length - fromCap;
+  if(overflow <= 0){ toast('No overflow to park','ok'); return; }
+
+  // Already used positions in target room
+  const toSeats = state.seating.filter(s=>s.sessionId===sessId && s.roomId===toRoomId);
+  const toCap = roomCapacity(toRoom);
+  if(toSeats.length >= toCap){ toast(`${toRoom.name} is already full`,'err'); return; }
+
+  // Sort source seats by row desc then col desc — pick the overflow tail
+  const sorted = [...fromSeats].sort((a,b)=> b.row!==a.row ? b.row-a.row : b.col-a.col);
+  const toMove = sorted.slice(0, overflow);
+
+  // Build a set of occupied (row,col) in the target room
+  const occupied = new Set(toSeats.map(s=>`${s.row},${s.col}`));
+
+  // Find free positions in target room (row-by-row, col-by-col)
+  const freePositions = [];
+  outer: for(let r=1; r<=toRoom.rows; r++){
+    for(let c=1; c<=toRoom.cols; c++){
+      if(!occupied.has(`${r},${c}`)){ freePositions.push({row:r,col:c}); if(freePositions.length===toMove.length) break outer; }
+    }
+  }
+
+  if(freePositions.length < toMove.length){
+    toast(`${toRoom.name} only has ${freePositions.length} free seat${freePositions.length!==1?'s':''} but needs ${toMove.length}`,'err');
+    return;
+  }
+
+  // Remove the overflow entries from source room
+  const toMoveIds = new Set(toMove.map(s=>s.studentId+'|'+s.courseId));
+  state.seating = state.seating.filter(s=>{
+    if(s.sessionId!==sessId || s.roomId!==fromRoomId) return true;
+    return !toMoveIds.has(s.studentId+'|'+s.courseId);
+  });
+
+  // Add them to the target room at free positions
+  toMove.forEach((s,i)=>{
+    state.seating.push({ sessionId:sessId, roomId:toRoomId, studentId:s.studentId, courseId:s.courseId, row:freePositions[i].row, col:freePositions[i].col });
+  });
+
+  save(); safeRender();
+  const stuNames = toMove.map(s=>{ const st=state.students.find(x=>x.id===s.studentId); return st?st.rollNo:s.studentId.slice(-4); });
+  toast(`✓ Parked ${toMove.length} student${toMove.length!==1?'s':''} from ${fromRoom.name} → ${toRoom.name}`, 'ok');
+}
+
+/* Auto-fix room overflow: forcibly move ALL overflow students from the source room
+   into ANY available rooms across the entire building, one room at a time. */
+function autoFixRoomOverflow(sessId, fromRoomId){
+  const fromRoom = state.rooms.find(r=>r.id===fromRoomId);
+  if(!fromRoom){ toast('Room not found','err'); return; }
+
+  let totalMoved = 0;
+
+  // Helper: find free seat positions in a room given already-occupied seats
+  function getFreePositions(room, occupiedSeats, need){
+    const occupied = new Set(occupiedSeats.map(s=>s.row+','+s.col));
+    const positions = [];
+    for(let r=1; r<=room.rows; r++){
+      for(let c=1; c<=room.cols; c++){
+        if(!occupied.has(r+','+c)){
+          positions.push({row:r, col:c});
+          if(positions.length === need) return positions;
+        }
+      }
+    }
+    return positions;
+  }
+
+  // All other active rooms — including empty ones not yet used this session
+  const candidateRooms = state.rooms
+    .filter(r=>r.active!==false && r.id!==fromRoomId)
+    .sort((a,b)=>roomCapacity(b)-roomCapacity(a));
+
+  for(let i=0; i<candidateRooms.length; i++){
+    // Re-read overflow each iteration since state.seating mutates
+    const fromSeats = state.seating.filter(s=>s.sessionId===sessId && s.roomId===fromRoomId);
+    const overflow = fromSeats.length - roomCapacity(fromRoom);
+    if(overflow <= 0) break;
+
+    const toRoom = candidateRooms[i];
+    const toSeats = state.seating.filter(s=>s.sessionId===sessId && s.roomId===toRoom.id);
+    const free = roomCapacity(toRoom) - toSeats.length;
+    if(free <= 0) continue;
+
+    const canTake = Math.min(overflow, free);
+
+    // Pick overflow students from the tail of source room
+    const sortedFrom = [...fromSeats].sort((a,b)=> a.row!==b.row ? b.row-a.row : b.col-a.col);
+    const toMove = sortedFrom.slice(0, canTake);
+    if(!toMove.length) continue;
+
+    // Get free positions in the target room
+    const freePos = getFreePositions(toRoom, toSeats, canTake);
+    if(!freePos.length) continue;
+
+    const actualMove = toMove.slice(0, freePos.length);
+
+    // Remove from source
+    const moveKeys = new Set(actualMove.map(s=>s.studentId+'::'+s.courseId));
+    state.seating = state.seating.filter(s=>{
+      if(s.sessionId!==sessId || s.roomId!==fromRoomId) return true;
+      return !moveKeys.has(s.studentId+'::'+s.courseId);
+    });
+
+    // Add to target
+    actualMove.forEach((s,idx)=>{
+      state.seating.push({
+        sessionId: sessId,
+        roomId: toRoom.id,
+        studentId: s.studentId,
+        courseId: s.courseId,
+        row: freePos[idx].row,
+        col: freePos[idx].col
+      });
+    });
+
+    totalMoved += actualMove.length;
+  }
+
+  const finalFromSeats = state.seating.filter(s=>s.sessionId===sessId && s.roomId===fromRoomId);
+  const remaining = Math.max(0, finalFromSeats.length - roomCapacity(fromRoom));
+
+  save(); safeRender();
+  if(remaining <= 0){
+    toast(`✓ All overflow fixed — ${totalMoved} student${totalMoved!==1?'s':''} moved to free rooms`, 'ok');
+  } else {
+    toast(`Moved ${totalMoved} students, ${remaining} still overflow — building is at full capacity`, 'warn');
+  }
+}
+
+/* Fix ALL room overflow conflicts in one click — iterates every overflowed room
+   across every session and parks students into available rooms. */
+function autoFixAllRoomOverflows(){
+  const conflicts = detectConflicts().filter(c=>c.type==='room-overflow');
+  if(!conflicts.length){ toast('No room overflow conflicts found ✓','ok'); return; }
+
+  let totalMoved = 0;
+  let totalRemaining = 0;
+
+  conflicts.forEach(c=>{
+    const fromRoom = state.rooms.find(r=>r.id===c._roomId);
+    if(!fromRoom) return;
+
+    const candidateRooms = state.rooms
+      .filter(r=>r.active!==false && r.id!==c._roomId)
+      .sort((a,b)=>roomCapacity(b)-roomCapacity(a));
+
+    for(let i=0; i<candidateRooms.length; i++){
+      const fromSeats = state.seating.filter(s=>s.sessionId===c._sessId && s.roomId===c._roomId);
+      const overflow = fromSeats.length - roomCapacity(fromRoom);
+      if(overflow <= 0) break;
+
+      const toRoom = candidateRooms[i];
+      const toSeats = state.seating.filter(s=>s.sessionId===c._sessId && s.roomId===toRoom.id);
+      const free = roomCapacity(toRoom) - toSeats.length;
+      if(free <= 0) continue;
+
+      const canTake = Math.min(overflow, free);
+      const sortedFrom = [...fromSeats].sort((a,b)=>a.row!==b.row?b.row-a.row:b.col-a.col);
+      const toMove = sortedFrom.slice(0, canTake);
+      if(!toMove.length) continue;
+
+      // Find free positions in target room
+      const occupied = new Set(toSeats.map(s=>s.row+','+s.col));
+      const freePos = [];
+      outer: for(let r=1; r<=toRoom.rows; r++){
+        for(let col=1; col<=toRoom.cols; col++){
+          if(!occupied.has(r+','+col)){ freePos.push({row:r,col}); if(freePos.length===toMove.length) break outer; }
+        }
+      }
+      const actualMove = toMove.slice(0, freePos.length);
+      const moveKeys = new Set(actualMove.map(s=>s.studentId+'::'+s.courseId));
+      state.seating = state.seating.filter(s=>{
+        if(s.sessionId!==c._sessId || s.roomId!==c._roomId) return true;
+        return !moveKeys.has(s.studentId+'::'+s.courseId);
+      });
+      actualMove.forEach((s,idx)=>{
+        state.seating.push({sessionId:c._sessId, roomId:toRoom.id, studentId:s.studentId, courseId:s.courseId, row:freePos[idx].row, col:freePos[idx].col});
+      });
+      totalMoved += actualMove.length;
+    }
+
+    const remaining = Math.max(0, state.seating.filter(s=>s.sessionId===c._sessId&&s.roomId===c._roomId).length - roomCapacity(fromRoom));
+    totalRemaining += remaining;
+  });
+
+  save(); safeRender();
+  if(totalRemaining === 0){
+    toast(`✓ All ${conflicts.length} room overflow${conflicts.length!==1?'s':''} resolved — ${totalMoved} student${totalMoved!==1?'s':''} redistributed`, 'ok');
+  } else {
+    toast(`Moved ${totalMoved} students across ${conflicts.length} rooms — ${totalRemaining} still overflow (building at capacity)`, 'warn');
+  }
+}
+
+function detectConflicts(){
+  buildConfCache();
+  const list = [];
+  const cap = totalRoomCap();
+
+  // --- Student same-session clash ---
+  // Deduplicate: only one conflict entry per (session, courseA, courseB) pair
+  for(const sess of state.sessions){
+    const exIds = state.scheduled.filter(s=>s.sessionId===sess.id).map(s=>s.courseId);
+    // Map studentId -> first courseId seen in this session
+    const seen = new Map();
+    // Track which (cA,cB) pairs we've already reported to avoid duplicate entries
+    const reportedPairs = new Set();
+
+    for(const cid of exIds){
+      const sids = studentsOf(cid);
+      for(const sid of sids){
+        if(seen.has(sid) && seen.get(sid) !== cid){
+          const cA = seen.get(sid);
+          const cB = cid;
+          const pairKey = [cA,cB].sort().join('|') + '|' + sess.id;
+          if(!reportedPairs.has(pairKey)){
+            reportedPairs.add(pairKey);
+            const courseA = state.courses.find(c=>c.id===cA);
+            const courseB = state.courses.find(c=>c.id===cB);
+            // Collect ALL students with this clash (not just the first one)
+            const clashStudents = studentsOf(cA).filter(s=>studentsOf(cB).includes(s));
+            const altSessions = state.sessions.filter(s=>
+              s.id !== sess.id &&
+              !state.scheduled.find(sc=>sc.sessionId===s.id && sc.courseId===cA) &&
+              !state.scheduled.find(sc=>sc.sessionId===s.id && sc.courseId===cB)
+            );
+            list.push({
+              type: 'student-clash',
+              clashStudents, // array of studentIds
+              sessionId: sess.id,
+              msg: `<b>${clashStudents.length} student${clashStudents.length>1?'s':''}</b> have two exams in <b>${esc(sess.label)} (${sess.date})</b>: <b>${esc(courseA?.code||cA)}</b> vs <b>${esc(courseB?.code||cB)}</b>`,
+              suggestion: altSessions.length
+                ? `Move one whole course to another slot, OR remove individual students from one of the two courses`
+                : `No free slots -- add a new session, or remove individual students from one course`,
+              fixCourses: [
+                {id:cA, code:courseA?.code||cA, title:courseA?.title||''},
+                {id:cB, code:courseB?.code||cB, title:courseB?.title||''}
+              ],
+              fixSessions: altSessions.map(s=>({
+                id:s.id, label:s.label, date:s.date,
+                time:`${s.startTime}-${s.endTime}`,
+                used: sessionCapUsed(s.id), cap
+              }))
+            });
+          }
+        } else {
+          seen.set(sid, cid);
+        }
+      }
+    }
+
+    // --- Faculty clash ---
+    const facs = exIds.map(c=>state.courses.find(x=>x.id===c)?.faculty).filter(Boolean);
+    const fc = new Map(); facs.forEach(f=>fc.set(f,(fc.get(f)||0)+1));
+    fc.forEach((n,f)=>{
+      if(n>1){
+        const clashing = exIds.filter(cid=>state.courses.find(x=>x.id===cid)?.faculty===f);
+        const altSessions = state.sessions.filter(s=>s.id!==sess.id &&
+          clashing.some(cid=>!state.scheduled.find(sc=>sc.sessionId===s.id&&sc.courseId===cid))
+        );
+        list.push({
+          type:'faculty-clash',
+          msg:`Faculty <b>${esc(f)}</b> has <b>${n} exams</b> in <b>${esc(sess.label)} (${sess.date})</b>: ${clashing.map(cid=>{const c=state.courses.find(x=>x.id===cid);return`<b>${esc(c?.code||cid)}</b>`;}).join(', ')}`,
+          suggestion:`Move one of ${esc(f)}'s courses to a free slot below`,
+          fixCourses: clashing.map(cid=>{const c=state.courses.find(x=>x.id===cid);return{id:cid,code:c?.code||cid,title:c?.title||''};}) ,
+          fixSessions: altSessions.map(s=>({
+            id:s.id, label:s.label, date:s.date,
+            time:`${s.startTime}-${s.endTime}`,
+            used: sessionCapUsed(s.id), cap
+          }))
+        });
+      }
+    });
+  }
+
+  // --- Unscheduled courses ---
+  eligible().forEach(c => {
+    if(!state.scheduled.find(s=>s.courseId===c.id)){
+      // A session only counts as a valid target if it has room AND won't create
+      // a faculty clash -- faculty clashes must never be offered as a "fix".
+      const validSessions = state.sessions.filter(sess=>{
+        if((cap - sessionCapUsed(sess.id)) < (c.studentCount||0)) return false;
+        const imp = previewMoveImpact(c.id, sess.id);
+        return !(imp && imp.facClash);
+      });
+      list.push({
+        type:'unscheduled', warn:true,
+        msg:`<b>${esc(c.code)} -- ${esc(c.title)}</b> (${esc(c.program)} ${esc(c.section)}, ${c.studentCount||0} students) is not scheduled`,
+        suggestion: validSessions.length ? `Assign to one of the sessions below` : `No session has enough capacity without a faculty clash (need ${c.studentCount||0} seats)`,
+        fixCourses:[{id:c.id, code:c.code, title:c.title}],
+        fixSessions: state.sessions.map(s=>{
+          const imp = previewMoveImpact(c.id, s.id);
+          const facClash = !!(imp && imp.facClash);
+          return {
+            id:s.id, label:s.label, date:s.date,
+            time:`${s.startTime}-${s.endTime}`,
+            used: sessionCapUsed(s.id), cap,
+            fits: (cap - sessionCapUsed(s.id)) >= (c.studentCount||0) && !facClash,
+            facClash
+          };
+        })
+      });
+    }
+  });
+
+  // --- Daily overload ---
+  const capFor = (sid) => ((_confCache?.stuCourseCount.get(sid)||0) >= 7 ? 2 : 1);
+  const studentDateExams = new Map();
+  state.scheduled.forEach(sc => {
+    const sess = state.sessions.find(s=>s.id===sc.sessionId); if(!sess) return;
+    state.students.filter(s=>(s.courseIds||[]).includes(sc.courseId)).forEach(st=>{
+      const key=st.id+'|'+sess.date;
+      if(!studentDateExams.has(key)) studentDateExams.set(key,{st,date:sess.date,count:0,courses:[],courseIds:[]});
+      const e=studentDateExams.get(key);
+      e.count++;
+      const c=state.courses.find(x=>x.id===sc.courseId);
+      e.courses.push(c?.code||'?'); e.courseIds.push(sc.courseId);
+    });
+  });
+  studentDateExams.forEach(e=>{
+    const dayLimit = capFor(e.st.id);
+    if(e.count>dayLimit){
+      const otherSessions = state.sessions.filter(s=>s.date!==e.date);
+      list.push({
+        type:'daily-overload',
+        _stuId: e.st.id, _date: e.date,
+        msg:`Student <b>${esc(e.st.rollNo)}</b> has <b>${e.count} exams on ${e.date}</b>: ${e.courses.map(c=>`<b>${esc(c)}</b>`).join(', ')} (limit: ${dayLimit}/day)`,
+        suggestion:`Move one of these courses to another date`,
+        fixCourses: e.courseIds.map(cid=>{const c=state.courses.find(x=>x.id===cid);return{id:cid,code:c?.code||cid,title:c?.title||''};}),
+        fixSessions: otherSessions.map(s=>({
+          id:s.id, label:s.label, date:s.date,
+          time:`${s.startTime}-${s.endTime}`,
+          used: sessionCapUsed(s.id), cap
+        }))
+      });
+    }
+  });
+
+  // --- Room overflow ---
+  for(const sess of state.sessions){
+    const seats = state.seating.filter(s=>s.sessionId===sess.id);
+    const byRoom = new Map();
+    seats.forEach(s=>byRoom.set(s.roomId,(byRoom.get(s.roomId)||0)+1));
+    byRoom.forEach((n,rid)=>{
+      const room=state.rooms.find(r=>r.id===rid); if(!room) return;
+      const roomCap=roomCapacity(room);
+      if(n>roomCap){
+        const overflow=n-roomCap;
+        const freeRooms = state.rooms.filter(r=>r.active!==false&&r.id!==rid).map(r=>{
+          const used=state.seating.filter(s=>s.sessionId===sess.id&&s.roomId===r.id).length;
+          return{id:r.id, ...r, free:roomCapacity(r)-used};
+        }).filter(r=>r.free>0);
+        list.push({
+          type:'room-overflow',
+          _sessId: sess.id,
+          _roomId: rid,
+          _roomName: room.name,
+          msg:`Room <b>${esc(room.name)}</b> in <b>${esc(sess.label)} (${sess.date})</b>: <b>${n} students</b> placed but capacity is <b>${roomCap}</b> (overflow: ${overflow})`,
+          suggestion:`Re-run 🪑 Generate Seating to fix, or manually reassign courses. Free rooms for this session shown below.`,
+          fixCourses:[],
+          fixSessions:[],
+          freeRooms: freeRooms.map(r=>({id:r.id, name:r.name, cap:roomCapacity(r), free:r.free})),
+          overflow
+        });
+      }
+    });
+  }
+
+  return list;
+}
+
+// Returns list of sessions with spare capacity and their named empty slots
+function sessionsWithSpace(minStudents, courseId){
+  const cap = totalRoomCap();
+  return state.sessions.map(s=>{
+    const used = sessionCapUsed(s.id);
+    const free = cap - used;
+    let facClash = false;
+    if(courseId){
+      const imp = previewMoveImpact(courseId, s.id);
+      facClash = !!(imp && imp.facClash);
+    }
+    return { ...s, used, free, fits: free >= minStudents && !facClash, facClash };
+  // A session with a faculty clash is never offered as an assignable slot,
+  // even if it has free seats -- faculty clashes must never be created.
+  }).filter(s=>s.free>0 && !s.facClash);
+}
+
+// Build a human-readable slot name: "Morning Session • 2026-05-04 (free: 312 seats)"
+function slotName(s){ return `${s.label} • ${s.date} ${s.startTime}-${s.endTime} (${s.free} free seats)`; }
+
+function renderConflicts(){
+  const cs = detectConflicts();
+  document.getElementById('stConfl').textContent = cs.length;
+  const v = document.getElementById('conflictsView');
+  if(!cs.length){ v.innerHTML = '<div class="empty-state" style="color:var(--grn)">✓ No conflicts detected.</div>'; return; }
+  // Same seatedLookup pattern as the Seating tab's Manual Seating Queue and
+  // Course-wise Clashes: a student who's already been seated for one of
+  // the two clashing courses has had this clash "settled" for seating
+  // purposes, even though the underlying schedule clash is unresolved
+  // until a course is moved. Conflicts had no visibility into this before.
+  const seatedLookup=new Map();
+  state.seating.forEach(s=>{ seatedLookup.set(`${s.sessionId}|${s.studentId}|${s.courseId}`, s); });
+
+  const typeOrder = {'student-clash':0,'faculty-clash':1,'daily-overload':2,'room-overflow':3,'unscheduled':4};
+  const sorted = [...cs].sort((a,b)=>(typeOrder[a.type]||9)-(typeOrder[b.type]||9));
+
+  const typeLabel = {
+    'student-clash':  {icon:'👥', label:'Student Clash',    color:'var(--red)'},
+    'faculty-clash':  {icon:'👨‍🏫', label:'Faculty Clash',  color:'var(--pur)'},
+    'daily-overload': {icon:'📅', label:'Daily Overload',   color:'var(--yel)'},
+    'room-overflow':  {icon:'🏛️', label:'Room Overflow',   color:'#b45309'},
+    'unscheduled':    {icon:'📋', label:'Not Scheduled',    color:'var(--tl)'}
+  };
+
+  const counts = {};
+  sorted.forEach(c=>counts[c.type]=(counts[c.type]||0)+1);
+  const summary = Object.entries(counts).map(([t,n])=>{
+    const tl = typeLabel[t]||{icon:'⚠️',label:t};
+    return `<span class="badge" style="background:${tl.color}20;color:${tl.color};border:1px solid ${tl.color}40">${tl.icon} ${n} ${tl.label}</span>`;
+  }).join('  ');
+
+  // Same-day student count summary (unique students with 2+ exams on the same date)
+  const sameDayByDate = new Map(); // date -> Set(studentId)
+  const sameDayStudents = new Set();
+  sorted.filter(c=>c.type==='daily-overload').forEach(c=>{
+    if(c._stuId && c._date){
+      sameDayStudents.add(c._stuId);
+      if(!sameDayByDate.has(c._date)) sameDayByDate.set(c._date, new Set());
+      sameDayByDate.get(c._date).add(c._stuId);
+    }
+  });
+  // Also include student-clash students (two exams in the same session = same day)
+  sorted.filter(c=>c.type==='student-clash').forEach(c=>{
+    const sess = state.sessions.find(s=>s.id===c.sessionId);
+    if(sess && c.clashStudents){
+      c.clashStudents.forEach(sid=>{
+        sameDayStudents.add(sid);
+        if(!sameDayByDate.has(sess.date)) sameDayByDate.set(sess.date, new Set());
+        sameDayByDate.get(sess.date).add(sid);
+      });
+    }
+  });
+  let sameDayLine = '';
+  if(sameDayStudents.size){
+    const dateBits = [...sameDayByDate.entries()].sort().map(([d,set])=>`<b>${esc(d)}</b>: ${set.size}`).join(' · ');
+    sameDayLine = `<div style="margin-bottom:10px;padding:8px 12px;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;font-size:12px;color:#92400e">
+      📅 <b>${sameDayStudents.size} student${sameDayStudents.size>1?'s':''}</b> have 2+ exams on the same day &nbsp;—&nbsp; ${dateBits}
+    </div>`;
+  }
+
+  v.innerHTML = sameDayLine + `<div style="margin-bottom:14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+    <span style="font-size:12px;color:var(--mut);font-weight:500">Summary:</span> ${summary}
+  </div>` +
+  sorted.map(c => {
+    const tl = typeLabel[c.type]||{icon:'⚠️',label:c.type,color:'var(--mut)'};
+
+    // -- Build fix buttons with NAMED EMPTY SLOTS --
+    let fixPanel = '';
+    if(c.type === 'unscheduled'){
+      const cObj = state.courses.find(x=>x.id===c.fixCourses[0]?.id);
+      const need = cObj?.studentCount||0;
+      const slots = sessionsWithSpace(need, cObj?.id);
+      if(slots.length){
+        fixPanel = `<div style="margin-top:8px;padding:9px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:5px">
+          <div style="font-size:11px;font-weight:600;color:var(--grn);margin-bottom:6px">📌 Available empty slots -- click to assign <b>${esc(cObj?.code)}</b> there:</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            ${slots.map(s=>`
+              <button class="btn sm ${s.fits?'green':'ghost'}" title="${slotName(s)}"
+                onclick="assignCourseToSession('${c.fixCourses[0]?.id}','${s.id}');renderConflicts()">
+                ${s.fits?'✓':'⚠'} ${esc(s.label)} ${s.date}<br>
+                <small style="font-weight:400;opacity:.85">${s.startTime}-${s.endTime} · ${s.free} free seats</small>
+              </button>`).join('')}
+          </div>
+        </div>`;
+      } else {
+        fixPanel = `<div style="margin-top:8px;padding:8px 10px;background:#fef2f2;border:1px solid #fecaca;border-radius:5px;font-size:11.5px;color:var(--red)">
+          ⛔ No session has enough free seats (need ${need}). Add more sessions or increase room capacity.
+        </div>`;
+      }
+    } else if(c.type === 'student-clash' || c.type === 'faculty-clash' || c.type === 'daily-overload'){
+      // Per-student removal panel (only for student-clash)
+      let perStudentPanel = '';
+      if(c.type === 'student-clash' && c.clashStudents?.length){
+        const [cA, cB] = c.fixCourses;
+        const stuRows = c.clashStudents.slice(0,20).map(sid=>{
+          const stu = state.students.find(x=>x.id===sid);
+          const seatA=seatedLookup.get(`${c.sessionId}|${sid}|${cA.id}`);
+          const seatB=seatedLookup.get(`${c.sessionId}|${sid}|${cB.id}`);
+          const seat=seatA||seatB;
+          const statusCell = seat
+            ? `<span class="badge green" title="${esc((state.rooms.find(r=>r.id===seat.roomId)||{}).name||seat.roomId)}, Row ${seat.row}, Column ${seat.col}">✓ Seated — ${esc(seat===seatA?cA.code:cB.code)}</span>`
+            : '<span class="badge gray">Not seated</span>';
+          return `<tr>
+            <td style="font-family:monospace;font-size:11px;padding:4px 6px">${esc(stu?.rollNo||sid)}</td>
+            <td style="padding:4px 6px">${esc(stu?.name||'')}</td>
+            <td style="padding:4px 6px">${statusCell}</td>
+            <td style="padding:4px 6px">
+              <button class="btn sm danger" onclick="unenrollStudentFromCourse('${sid}','${cA.id}');renderConflicts()" title="Remove from ${esc(cA.code)}">
+                Remove from ${esc(cA.code)}
+              </button>
+              &nbsp;
+              <button class="btn sm danger" onclick="unenrollStudentFromCourse('${sid}','${cB.id}');renderConflicts()" title="Remove from ${esc(cB.code)}">
+                Remove from ${esc(cB.code)}
+              </button>
+            </td>
+          </tr>`;
+        }).join('');
+        const more = c.clashStudents.length > 20 ? `<tr><td colspan="4" style="padding:4px 6px;color:var(--mut);font-style:italic">…and ${c.clashStudents.length-20} more students</td></tr>` : '';
+        perStudentPanel = `<div style="margin-top:8px;padding:9px;background:#fff1f2;border:1px solid #fecdd3;border-radius:5px">
+          <div style="font-size:11px;font-weight:600;color:var(--red);margin-bottom:6px">👤 Option A -- Remove individual students from one course:</div>
+          <div style="max-height:200px;overflow-y:auto;border:1px solid var(--brd);border-radius:4px">
+            <table style="width:100%;border-collapse:collapse;font-size:11px">
+              <thead><tr style="background:#f8fafc"><th style="padding:4px 6px;text-align:left">Roll No</th><th style="padding:4px 6px;text-align:left">Name</th><th style="padding:4px 6px;text-align:left">Seating Status</th><th style="padding:4px 6px;text-align:left">Action</th></tr></thead>
+              <tbody>${stuRows}${more}</tbody>
+            </table>
+          </div>
+        </div>`;
+      }
+
+      const courseBtns = c.fixCourses.map(fc=>{
+        const slots = sessionsWithSpace(state.courses.find(x=>x.id===fc.id)?.studentCount||0)
+          .filter(s=>!state.scheduled.find(sc=>sc.sessionId===s.id && sc.courseId===fc.id));
+        if(!slots.length) return `<div style="font-size:11.5px;color:var(--mut);margin-bottom:4px">No free slot for <b>${esc(fc.code)}</b> -- add a session.</div>`;
+        return `<div style="margin-bottom:8px">
+          <div style="font-size:11px;font-weight:600;margin-bottom:5px;color:var(--pri)">Move whole course <b>${esc(fc.code)}</b> -- ${esc(fc.title)} to:</div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px">
+            ${slots.map(s=>{
+              const imp = previewMoveImpact(fc.id, s.id);
+              const cls = imp && !imp.safe ? 'danger' : (s.fits?'green':'ghost');
+              return `
+              <button class="btn sm ${cls}" title="${slotName(s)}"
+                onclick="tryMoveCourse('${fc.id}','${s.id}');renderConflicts()">
+                ${s.fits?'✓':'⚠'} ${esc(s.label)} ${s.date} · ${s.startTime}-${s.endTime}
+                <br><small style="font-weight:400;opacity:.85">${s.free} free seats</small>
+                ${impactBadge(imp)}
+              </button>`;}).join('')}
+          </div>
+        </div>`;
+      }).join('');
+
+      const coursePanel = courseBtns ? `<div style="margin-top:8px;padding:9px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:5px">
+        <div style="font-size:11px;font-weight:600;color:var(--pri);margin-bottom:6px">🔄 Option B -- Move whole course to a named empty slot:</div>
+        ${courseBtns}
+      </div>` : '';
+
+      fixPanel = perStudentPanel + coursePanel;
+    } else if(c.type === 'room-overflow'){
+      // Show rooms table with capacity, used, free, and a Park Here button for rooms with space
+      const allRooms = state.rooms.filter(r=>r.active!==false).map(r=>{
+        const used = state.seating.filter(s=>s.sessionId===(c._sessId||'') && s.roomId===r.id).length;
+        const cap = roomCapacity(r);
+        const free = cap - used;
+        return {...r, used, cap, free};
+      });
+      const overflowCount = c.overflow;
+      const fromRoomId = c._roomId;
+      const sessId = c._sessId;
+      const roomRows = allRooms.map(r=>{
+        const isSource = r.id === fromRoomId;
+        const canPark = !isSource && r.free > 0;
+        const enoughForAll = r.free >= overflowCount;
+        return `<tr style="${isSource?'background:#fef2f2;':''}">
+          <td style="font-weight:500">${esc(r.name)}${isSource?` <span class="badge red" style="font-size:10px">overflow room</span>`:''}
+          </td>
+          <td>${r.cols} × ${r.rows}</td>
+          <td><b>${r.cap}</b></td>
+          <td>${r.used}</td>
+          <td><span class="${r.free>0?'room-cap-badge':(r.free===0?'room-cap-badge warn':'room-cap-badge over')}">${r.free>0?'+'+r.free+' free':(r.free===0?'Full':r.free+' over')}</span></td>
+          <td>${canPark ? `
+            <button class="btn sm ${enoughForAll?'green':'ghost'}" style="font-size:11px;padding:4px 9px"
+              onclick="parkOverflowInRoom('${sessId}','${fromRoomId}','${r.id}');renderConflicts()"
+              title="${enoughForAll?'Fits all '+overflowCount+' overflow students':'Only fits '+r.free+' of '+overflowCount+' students'}">
+              📦 Park ${enoughForAll ? 'all '+overflowCount : r.free} here
+            </button>` : `<span style="font-size:10.5px;color:var(--mut)">${isSource?'—':'Full'}</span>`}
+          </td>
+        </tr>`;
+      }).join('');
+      fixPanel = `<div style="margin-top:8px">
+        <div style="font-size:11px;font-weight:600;color:#92400e;margin-bottom:6px">🏛️ Room capacity overview for this session:</div>
+        <div class="tbl-wrap" style="max-height:220px">
+          <table style="font-size:11px">
+            <thead><tr><th>Room</th><th>Layout</th><th>Capacity</th><th>Used</th><th>Available</th><th>Action</th></tr></thead>
+            <tbody>${roomRows}</tbody>
+          </table>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="autofix-btn" onclick="runSeating();renderConflicts()" title="Re-run seating: fills each room to capacity (largest first) before moving to the next">⚡ Auto-Fix: Re-generate Seating</button>
+          <span style="font-size:10.5px;color:var(--mut)">This will re-pack students room-by-room (largest capacity first, filled to the max) to eliminate overflow.</span>
+        </div>
+      </div>`;
+    }
+
+    // --- Auto-fix button logic per type ---
+    let autoFixBtn = '';
+    if(c.type === 'student-clash' || c.type === 'faculty-clash'){
+      // Find the safest session for the first clashing course
+      const fc = c.fixCourses[0];
+      if(fc){
+        const safeSess = state.sessions.find(s=>{
+          const imp = previewMoveImpact(fc.id, s.id);
+          return imp && imp.safe && !state.scheduled.find(sc=>sc.sessionId===s.id&&sc.courseId===fc.id);
+        });
+        if(safeSess){
+          autoFixBtn = `<button class="autofix-btn" onclick="moveCourseToSession('${fc.id}','${safeSess.id}');renderConflicts()" title="Move ${esc(fc.code)} to ${esc(safeSess.label)} ${safeSess.date} — no new clashes">⚡ Auto-Fix: Move ${esc(fc.code)} → ${esc(safeSess.label)} ${safeSess.date}</button>`;
+        } else {
+          autoFixBtn = `<span class="autofix-btn disabled" title="No safe session found automatically — use manual options below">⚡ No safe slot found — use manual fix</span>`;
+        }
+      }
+    } else if(c.type === 'daily-overload'){
+      const fc = c.fixCourses[0];
+      if(fc){
+        const curSess = state.scheduled.find(sc=>sc.courseId===fc.id);
+        const safeSess = state.sessions.find(s=>{
+          if(!curSess || s.date === state.sessions.find(x=>x.id===curSess?.sessionId)?.date) return false;
+          const imp = previewMoveImpact(fc.id, s.id);
+          return imp && imp.safe;
+        });
+        if(safeSess){
+          autoFixBtn = `<button class="autofix-btn" onclick="moveCourseToSession('${fc.id}','${safeSess.id}');renderConflicts()" title="Move to another date — no new clashes">⚡ Auto-Fix: Move ${esc(fc.code)} → ${esc(safeSess.label)} ${safeSess.date}</button>`;
+        } else {
+          autoFixBtn = `<span class="autofix-btn disabled">⚡ No safe date found automatically</span>`;
+        }
+      }
+    } else if(c.type === 'room-overflow'){
+      const totalFreeSeats = c.freeRooms.reduce((n,r)=>n+r.free,0);
+      const label = totalFreeSeats >= c.overflow
+        ? `⚡ Auto-Fix: Park All ${c.overflow} Overflow Students`
+        : `⚡ Auto-Fix: Park ${totalFreeSeats} into Free Rooms`;
+      autoFixBtn = `<button class="autofix-btn" onclick="autoFixRoomOverflow('${c._sessId}','${c._roomId}');renderConflicts()" title="Distribute all overflow students across all available rooms">${label}</button>`;
+    } else if(c.type === 'unscheduled'){
+      const fc = c.fixCourses[0];
+      const fitSess = c.fixSessions?.find(s=>s.fits);
+      if(fc && fitSess){
+        autoFixBtn = `<button class="autofix-btn" onclick="assignCourseToSession('${fc.id}','${fitSess.id}');renderConflicts()" title="Assign to ${esc(fitSess.label)} ${fitSess.date}">⚡ Auto-Fix: Schedule in ${esc(fitSess.label)} ${fitSess.date}</button>`;
+      }
+    }
+
+    let seatedBadge = '';
+    if(c.type==='student-clash' && c.clashStudents?.length){
+      const [cA,cB]=c.fixCourses;
+      const settled=c.clashStudents.filter(sid=>seatedLookup.has(`${c.sessionId}|${sid}|${cA.id}`)||seatedLookup.has(`${c.sessionId}|${sid}|${cB.id}`)).length;
+      if(settled) seatedBadge=`<span class="badge green" title="Already seated for one of the two clashing courses">${settled}/${c.clashStudents.length} seated</span>`;
+    }
+    return `<div class="confl ${c.warn?'warn':''}" style="border-left-color:${tl.color};margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
+        <span style="font-size:13px">${tl.icon}</span>
+        <span style="font-weight:600;font-size:12px;color:${tl.color};text-transform:uppercase;letter-spacing:.5px">${tl.label}</span>
+        ${seatedBadge}
+        <span style="flex:1"></span>
+        ${autoFixBtn}
+      </div>
+      <div style="margin-bottom:6px;line-height:1.5">${c.msg}</div>
+      <div style="background:#fff;border:1px solid var(--brd);border-radius:4px;padding:7px 10px;font-size:11.5px;color:var(--mut);line-height:1.5">
+        💡 ${c.suggestion||''}
+      </div>
+      ${fixPanel}
+    </div>`;
+  }).join('');
+}
+
+/* ================= STUDENTS VIEW ================= */
+// Returns unique student IDs assigned to a session (via scheduled courses + enrollment data)
+function sessUniqueStudents(sessId){
+  const courseIds = state.scheduled.filter(s=>s.sessionId===sessId).map(s=>s.courseId);
+  const ids = new Set();
+  courseIds.forEach(cid => state.students.forEach(st => { if((st.courseIds||[]).includes(cid)) ids.add(st.id); }));
+  return ids.size || courseIds.reduce((n,cid)=>{ const c=state.courses.find(x=>x.id===cid); return n+(c?c.studentCount||0:0); },0);
+}
+
+function renderOccupancy(){
+  const v=document.getElementById('occupancyView');
+  if(!v) return;
+  if(!state.sessions.length){ v.innerHTML='<div class="empty-state">No sessions defined.</div>'; return; }
+  const roomCap=state.rooms.filter(r=>r.active!==false).reduce((n,r)=>n+roomCapacity(r),0);
+  const dates=[...new Set(state.sessions.map(s=>s.date))].sort();
+
+  v.innerHTML = dates.map(date=>{
+    const daySessions=state.sessions.filter(s=>s.date===date);
+    const rows = daySessions.map(sess=>{
+      const uniqueStu = sessUniqueStudents(sess.id);
+      const seatCount = state.seating.filter(x=>x.sessionId===sess.id).length;
+      const display = seatCount || uniqueStu;
+      const pct = roomCap ? Math.round(display*100/roomCap) : 0;
+      const freeSeat = roomCap - display;
+      const color = pct>=80?'var(--grn)':pct>=50?'var(--yel)':'var(--red)';
+      const barColor = pct>=80?'#15803d':pct>=50?'#a16207':'#b91c1c';
+      const roomSummary = seatCount
+        ? state.rooms.filter(r=>r.active!==false).map(r=>{
+            const used=state.seating.filter(x=>x.sessionId===sess.id&&x.roomId===r.id).length;
+            const cap=roomCapacity(r);
+            const free=cap-used;
+            return used
+              ? `<span title="${free} seats free in ${r.name}">${r.name}: ${used}/${cap}${free>0?` <span style="color:var(--grn);font-size:10px">(+${free} free)</span>`:''}</span>`
+              : null;
+          }).filter(Boolean).join(' &nbsp;·&nbsp; ')
+        : '<i style="color:var(--mut)">Run Auto Seating to see breakdown</i>';
+
+      // Named empty-slot suggestion
+      const emptySlotNote = freeSeat > 0
+        ? `<div style="font-size:10.5px;color:#16a34a;margin-top:3px">📌 Slot "<b>${esc(sess.label)} · ${sess.date} ${sess.startTime}-${sess.endTime}</b>" has <b>${freeSeat} free seats</b> -- assign more courses here from the ⚠ Conflicts tab.</div>`
+        : `<div style="font-size:10.5px;color:#15803d;margin-top:3px">✅ Fully utilized</div>`;
+
+      return `<tr>
+        <td><b>${esc(sess.label)}</b><br><small style="color:var(--mut)">${sess.startTime}-${sess.endTime}</small></td>
+        <td>${roomCap}</td>
+        <td>${display}${seatCount&&seatCount!==uniqueStu?` <small style="color:var(--mut)">(scheduled: ${uniqueStu})</small>`:''}</td>
+        <td>
+          <b style="color:${color}">${pct}%</b>
+          <div style="background:#e2e8f0;border-radius:4px;height:7px;width:100px;margin-top:3px;overflow:hidden">
+            <div style="background:${barColor};height:100%;width:${Math.min(pct,100)}%;transition:width .3s"></div>
+          </div>
+        </td>
+        <td style="font-size:11px;max-width:340px;word-break:break-word">${roomSummary||'--'}${emptySlotNote}</td>
+      </tr>`;
+    }).join('');
+    return `<div class="card"><h3>📅 ${date}</h3>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Session</th><th>Room Capacity</th><th>Unique Students</th><th>Utilization</th><th>Room Breakdown & Empty Slots</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div></div>`;
+  }).join('') || '<div class="empty-state">No session data.</div>';
+}
+
+function normalizeAttendanceCourseName(s){
+  // The official Short-Of-Attendance workbook embeds the class/section
+  // in the course name itself, e.g. "Development Studies(BBA-3)", while
+  // the scheduler's own course titles are plain, e.g. "Development
+  // Studies". Left unstripped, that trailing "(...)" made every single
+  // uploaded row fail to match a course, which is why almost everything
+  // ended up flagged "Unresolved" in the Short of Attendance tab. Strip
+  // a trailing parenthetical section tag before comparing.
+  return String(s||'')
+    .toLowerCase()
+    .replace(/\s*\([^)]*\)\s*$/,'')
+    .replace(/[\u2013\u2014]/g,'-')
+    .replace(/\s+/g,' ')
+    .replace(/[\s\-]+$/,'')
+    .trim();
+}
+function normalizeRegNo(s){
+  // Registration numbers get exported in inconsistent shapes across
+  // sheets -- "bba242037" vs "BBA-24-2037" vs "BBA 24 2037" -- which
+  // used to make otherwise-matching students fail to link up and get
+  // flagged "Unresolved". Strip everything but letters/digits and
+  // lowercase, so formatting differences no longer break the match.
+  return String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'').trim();
+}
+function shortAttendanceKey(regNo, courseName){
+  return normalizeRegNo(regNo)+'|'+normalizeAttendanceCourseName(courseName);
+}
+function shortAttendanceFor(studentId, courseId){
+  const st=state.students.find(x=>x.id===studentId), c=state.courses.find(x=>x.id===courseId);
+  if(!st||!c) return null;
+  const reg=normalizeRegNo(st.rollNo), cname=normalizeAttendanceCourseName(c.title);
+  return (state.shortAttendance||[]).find(r=>{
+    if(r.studentId===studentId && r.courseId===courseId) return true;
+    return normalizeRegNo(r.regNo)===reg && normalizeAttendanceCourseName(r.courseName)===cname;
+  }) || null;
+}
+function shortAttendanceForRegCourse(regNo, courseName){
+  const key=shortAttendanceKey(regNo,courseName);
+  return (state.shortAttendance||[]).find(r=>shortAttendanceKey(r.regNo,r.courseName)===key) || null;
+}
+function syncShortAttendanceLinks(){
+  state.shortAttendance=Array.isArray(state.shortAttendance)?state.shortAttendance:[];
+  state.shortAttendance.forEach(r=>{
+    const st=state.students.find(x=>normalizeRegNo(x.rollNo)===normalizeRegNo(r.regNo));
+    if(st) r.studentId=st.id;
+    const candidates=state.courses.filter(c=>normalizeAttendanceCourseName(c.title)===normalizeAttendanceCourseName(r.courseName));
+    if(r.courseId && state.courses.some(c=>c.id===r.courseId)) return;
+    if(candidates.length===1) r.courseId=candidates[0].id;
+    else if(st && candidates.length>1){
+      const linked=candidates.find(c=>(st.courseIds||[]).includes(c.id));
+      if(linked) r.courseId=linked.id;
+    }
+  });
+}
+function renderStudents(){
+  syncShortAttendanceLinks();
+  syncDocRequiredLinks();
+  const q = (document.getElementById('stuSearch').value||'').toLowerCase();
+  const list = state.students.filter(s => !q || (`${s.rollNo} ${s.name} ${s.program} ${s.section}`).toLowerCase().includes(q));
+  document.getElementById('stuCount').textContent = state.students.length;
+  document.getElementById('studentsBody').innerHTML = list.map(st => {
+    const anyShort=(st.courseIds||[]).some(cid=>!!shortAttendanceFor(st.id,cid));
+    const docRec=docRequiredForReg(st.rollNo);
+    const studentBadge=(anyShort ? ` <span class="badge red" title="One or more courses are short of attendance">SHORT OF ATTENDANCE</span>` : '')
+      + (docRec ? ` <span class="badge red" title="${esc(docRec.remarks||'Documents required')}">${esc(docRec.remarks||'DOCUMENTS REQUIRED')}</span>` : '');
+    const exams = st.courseIds.map(cid => {
+      const sc = state.scheduled.find(x=>x.courseId===cid), c = state.courses.find(x=>x.id===cid);
+      const sess = sc ? state.sessions.find(x=>x.id===sc.sessionId) : null;
+      if(!c) return '';
+      const rec=shortAttendanceFor(st.id,c.id), isShort=!!rec;
+      const removeBtn = `<button title="Remove ${esc(c.code)} from ${esc(st.rollNo)}" onclick="if(confirm('Remove ${esc(c.code)} from ${esc(st.rollNo)}?'))unenrollStudentFromCourse('${st.id}','${c.id}')" style="background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;border-radius:50%;width:18px;height:18px;line-height:14px;font-size:11px;cursor:pointer;padding:0;margin-right:6px;font-weight:bold">✕</button>`;
+      const shortBadge=isShort ? `<span class="badge red" title="${esc(rec.documentsNote||'Documents required: '+((rec.documentsRequired||[]).join(', ')||'Not specified'))}">SHORT OF ATTENDANCE</span>` : '';
+      const manual=`<label style="font-size:10px;margin-left:6px;white-space:nowrap"><input type="checkbox" ${isShort?'checked':''} onchange="toggleShortAttendance('${st.id}','${c.id}',this.checked)"> Short</label>`;
+      const docs=isShort?`<span style="font-size:10px;color:#991b1b">Docs: ${esc((rec.documentsRequired||[]).join(', ')||'Not specified')}${rec.documentsNote?` — ${esc(rec.documentsNote)}`:''}</span>`:'';
+      return `<div style="display:flex;align-items:flex-start;padding:3px 0;gap:3px;flex-wrap:wrap">${removeBtn}<span><b>${esc(c.code)}</b> <span style="color:var(--mut)">${esc(c.title)}</span> ${sess?`-- ${sess.date} ${sess.startTime}`:`<span class="badge red">unscheduled</span>`} ${shortBadge} ${manual}<br>${docs}</span></div>`;
+    }).join('');
+    return `<tr><td style="font-family:monospace">${esc(st.rollNo)}</td><td>${esc(st.name)}${studentBadge}</td><td>${esc(st.program)}</td><td>${esc(st.section)}</td><td>${exams||'<span class="desc">No courses</span>'}</td></tr>`;
+  }).join('') || '<tr><td colspan="5" class="empty-state">No students. Import an Excel sheet with a Students tab.</td></tr>';
+}
+function toggleShortAttendance(studentId,courseId,checked){
+  syncShortAttendanceLinks();
+  const st=state.students.find(x=>x.id===studentId), c=state.courses.find(x=>x.id===courseId); if(!st||!c) return;
+  state.shortAttendance=Array.isArray(state.shortAttendance)?state.shortAttendance:[];
+  const existing=shortAttendanceFor(studentId,courseId);
+  if(checked && !existing){
+    state.shortAttendance.push({studentId,courseId,regNo:st.rollNo,courseName:c.title,attendancePercentage:'',eligibility:'Ineligible',documentsRequired:[],documentsNote:'',source:'Manual'});
+  }else if(!checked){
+    state.shortAttendance=state.shortAttendance.filter(r=>!(r.studentId===studentId&&r.courseId===courseId) && !(normalizeRegNo(r.regNo)===normalizeRegNo(st.rollNo)&&normalizeAttendanceCourseName(r.courseName)===normalizeAttendanceCourseName(c.title)));
+  }
+  save(); renderStudents(); renderShortAttendance(); renderShortAttendanceReport();
+}
+function updateShortAttendanceDocs(index,kind,value){
+  const r=(state.shortAttendance||[])[index]; if(!r) return;
+  if(kind==='toggleDoc'){
+    r.documentsRequired=Array.isArray(r.documentsRequired)?r.documentsRequired:[];
+    if(value.checked && !r.documentsRequired.includes(value.name)) r.documentsRequired.push(value.name);
+    if(!value.checked) r.documentsRequired=r.documentsRequired.filter(x=>x!==value.name);
+  }else if(kind==='note') r.documentsNote=value;
+  save(); renderStudents(); renderShortAttendance(); renderShortAttendanceReport();
+}
+function renderShortAttendance(){
+  syncShortAttendanceLinks();
+  const q=(document.getElementById('shortAttendanceSearch')?.value||'').toLowerCase().trim();
+  const rows=(state.shortAttendance||[]).map((r,index)=>{
+    const st=state.students.find(x=>x.id===r.studentId) || state.students.find(x=>normalizeRegNo(x.rollNo)===normalizeRegNo(r.regNo));
+    const c=state.courses.find(x=>x.id===r.courseId) || state.courses.find(x=>normalizeAttendanceCourseName(x.title)===normalizeAttendanceCourseName(r.courseName));
+    const studentName=st?.name || r.regNo || 'Unresolved student', courseName=c?`${c.code} — ${c.title}`:(r.courseName||'Unresolved course');
+    const hay=`${r.regNo} ${studentName} ${courseName}`.toLowerCase(); if(q && !hay.includes(q)) return '';
+    const docs=Array.isArray(r.documentsRequired)?r.documentsRequired:[], docOptions=['Application / Request','Medical Certificate','Supporting Evidence','Other'];
+    return `<tr style="${(!st||!c)?'background:#fff7ed':''}">
+      <td style="font-family:monospace">${esc(r.regNo)}</td><td><b>${esc(studentName)}</b></td><td>${esc(courseName)}</td>
+      <td><input type="number" min="0" max="100" step="0.1" value="${esc(r.attendancePercentage??'')}" onchange="state.shortAttendance[${index}].attendancePercentage=this.value;save();renderStudents()" style="width:75px"></td>
+      <td><span class="badge red">SHORT OF ATTENDANCE</span></td>
+      <td style="text-align:center"><input type="checkbox" checked onchange="toggleShortAttendance('${r.studentId||''}','${r.courseId||''}',this.checked)" title="Unmark short attendance"></td>
+      <td><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${docOptions.map(d=>`<label style="font-size:10px;white-space:nowrap"><input type="checkbox" ${docs.includes(d)?'checked':''} onchange="updateShortAttendanceDocs(${index},'toggleDoc',{name:'${d}',checked:this.checked})"> ${d}</label>`).join('')}<input placeholder="Other document / note" value="${esc(r.documentsNote||'')}" onchange="updateShortAttendanceDocs(${index},'note',this.value)" style="width:150px"></div></td>
+      <td><span class="badge gray">${esc(r.source||'Manual')}</span></td>
+    </tr>`;
+  }).join('');
+  const body=document.getElementById('shortAttendanceBody'); if(body) body.innerHTML=rows||'<tr><td colspan="8" class="empty-state">No short-attendance records. Upload the official Excel sheet or mark a course manually from the Students tab.</td></tr>';
+  const records=state.shortAttendance||[], affected=new Set(records.map(r=>normalizeRegNo(r.regNo)).filter(Boolean));
+  const docsCount=records.filter(r=>(r.documentsRequired||[]).length || String(r.documentsNote||'').trim()).length;
+  const unresolved=records.filter(r=>!state.students.some(s=>normalizeRegNo(s.rollNo)===normalizeRegNo(r.regNo)) || !state.courses.some(c=>normalizeAttendanceCourseName(c.title)===normalizeAttendanceCourseName(r.courseName))).length;
+  const el=id=>document.getElementById(id); if(el('shortAttendanceCount'))el('shortAttendanceCount').textContent=records.length; if(el('shortAttendanceStudentCount'))el('shortAttendanceStudentCount').textContent=affected.size; if(el('shortAttendanceDocsCount'))el('shortAttendanceDocsCount').textContent=docsCount; if(el('shortAttendanceUnresolvedCount'))el('shortAttendanceUnresolvedCount').textContent=unresolved;
+  renderShortAttendanceReport();
+}
+
+/* ============= SHORT ATTENDANCE PROGRAM-WISE REPORT ============= */
+function shortAttendanceReportRows(programFilter='__ALL__'){
+  syncShortAttendanceLinks();
+  const map=new Map();
+  (state.shortAttendance||[]).forEach(r=>{
+    const st=state.students.find(x=>x.id===r.studentId) || state.students.find(x=>normalizeRegNo(x.rollNo)===normalizeRegNo(r.regNo));
+    const c=state.courses.find(x=>x.id===r.courseId) || state.courses.find(x=>normalizeAttendanceCourseName(x.title)===normalizeAttendanceCourseName(r.courseName));
+    const reg=String(r.regNo||st?.rollNo||'').trim();
+    if(!reg) return;
+    const program=String(st?.program||c?.program||r.program||'Unresolved').trim() || 'Unresolved';
+    if(programFilter!=='__ALL__' && program!==programFilter) return;
+    const key=reg.toLowerCase();
+    if(!map.has(key)) map.set(key,{regNo:reg,name:st?.name||'Unresolved student',program,section:st?.section||c?.section||'',courses:[],documents:[],attendance:[]});
+    const row=map.get(key);
+    const courseLabel=c ? `${c.code} — ${c.title}` : (r.courseName||'Unresolved course');
+    if(!row.courses.some(x=>x.toLowerCase()===courseLabel.toLowerCase())) row.courses.push(courseLabel);
+    (Array.isArray(r.documentsRequired)?r.documentsRequired:[]).forEach(d=>{if(!row.documents.includes(d)) row.documents.push(d);});
+    const pct=String(r.attendancePercentage??'').trim();
+    if(pct && !row.attendance.includes(pct)) row.attendance.push(pct);
+  });
+  return [...map.values()].sort((a,b)=>a.program.localeCompare(b.program)||a.name.localeCompare(b.name)||a.regNo.localeCompare(b.regNo));
+}
+function shortAttendanceReportGroups(programFilter='__ALL__'){
+  const groups=new Map();
+  shortAttendanceReportRows(programFilter).forEach(row=>{if(!groups.has(row.program))groups.set(row.program,[]);groups.get(row.program).push(row);});
+  return [...groups.entries()].sort((a,b)=>a[0].localeCompare(b[0]));
+}
+function renderShortAttendanceReport(){
+  const sel=document.getElementById('shortAttendanceProgramFilter');
+  if(!sel) return;
+  const current=sel.value||'__ALL__';
+  const programs=[...new Set(shortAttendanceReportRows('__ALL__').map(r=>r.program))].sort((a,b)=>a.localeCompare(b));
+  sel.innerHTML='<option value="__ALL__">All Programs</option>'+programs.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  sel.value=programs.includes(current)?current:'__ALL__';
+  const groups=shortAttendanceReportGroups(sel.value);
+  const rows=groups.flatMap(([program,items])=>items.map((x,i)=>({...x,sno:i+1})));
+  const students=rows.length, programCount=groups.length, courseCount=rows.reduce((n,x)=>n+x.courses.length,0);
+  const el=id=>document.getElementById(id);
+  if(el('shortReportStudentCount'))el('shortReportStudentCount').textContent=students;
+  if(el('shortReportProgramCount'))el('shortReportProgramCount').textContent=programCount;
+  if(el('shortReportCourseCount'))el('shortReportCourseCount').textContent=courseCount;
+  const host=document.getElementById('shortAttendanceProgramReport'); if(!host)return;
+  if(!groups.length){host.innerHTML='<div class="empty-state">No short-of-attendance students found.</div>';return;}
+  host.innerHTML=groups.map(([program,items])=>`<div style="margin-bottom:18px">
+    <div style="font-weight:800;font-size:14px;margin:4px 0 6px;padding:7px 9px;background:#fee2e2;border-left:4px solid #b91c1c">PROGRAM: ${esc(program)} <span style="float:right">${items.length} unique student${items.length===1?'':'s'}</span></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>S.No.</th><th>Reg No.</th><th>Student Name</th><th>Section</th><th>Short of Attendance Course(s)</th><th>Attendance %</th><th>Documents Required</th></tr></thead>
+      <tbody>${items.map((x,i)=>`<tr>
+        <td style="text-align:center;font-weight:700">${i+1}</td><td style="font-family:monospace">${esc(x.regNo)}</td><td><b>${esc(x.name)}</b></td><td>${esc(x.section||'--')}</td>
+        <td>${x.courses.map(c=>`<div style="padding:2px 0">${esc(c)}</div>`).join('')}</td><td>${esc(x.attendance.join(', ')||'--')}</td><td>${esc(x.documents.join(', ')||'--')}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+  </div>`).join('');
+}
+function pdfShortAttendanceReport(){
+  const groups=shortAttendanceReportGroups(document.getElementById('shortAttendanceProgramFilter')?.value||'__ALL__');
+  if(!groups.length){toast('No short-of-attendance records to report','warn');return;}
+  if(typeof jsPDF==='undefined'){toast('PDF library is not available. Please reload the app.','err');return;}
+  const doc=new jsPDF({unit:'pt',format:'a4',orientation:'landscape'});
+  const pw=doc.internal.pageSize.getWidth(), black=[0,0,0];
+  groups.forEach(([program,items],gi)=>{
+    if(gi)doc.addPage(); let y=28;
+    const center=(text,size=14,bold=true)=>{doc.setFont('times',bold?'bold':'normal');doc.setFontSize(size);doc.setTextColor(...black);doc.text(String(text||''),pw/2,y,{align:'center'});y+=size+6;};
+    center(state.uniName||'DHA SUFFA UNIVERSITY',18,true); center(reportExamTitle(),14,true); center(timetableDepartmentHeaderLabel(),13,true); center(`SHORT OF ATTENDANCE — ${program}`,15,true);
+    doc.autoTable({head:[['S.No.','Reg No.','Student Name','Section','Short of Attendance Course(s)','Attendance %','Documents Required']],body:items.map((x,i)=>[i+1,x.regNo,x.name,x.section||'--',x.courses.join('\n'),x.attendance.join(', ')||'--',x.documents.join(', ')||'--']),startY:y,margin:{left:24,right:24,bottom:24},theme:'grid',styles:{font:'times',fontSize:9,textColor:black,lineColor:black,lineWidth:.5,cellPadding:4,valign:'middle',overflow:'linebreak'},headStyles:{font:'times',fontStyle:'bold',fontSize:10,fillColor:[255,255,255],textColor:black,lineColor:black,lineWidth:.7,halign:'center'},columnStyles:{0:{cellWidth:38,halign:'center'},1:{cellWidth:72},2:{cellWidth:120},3:{cellWidth:58},4:{cellWidth:220},5:{cellWidth:75},6:{cellWidth:150}}});
+  });
+  doc.save('short-of-attendance-program-wise-DSU.pdf');
+  toast(`Downloaded Program-wise Short of Attendance PDF — ${groups.length} program(s), ${groups.reduce((n,g)=>n+g[1].length,0)} unique student(s)`,'ok');
+}
+async function xlsxShortAttendanceReport(){
+  const groups=shortAttendanceReportGroups(document.getElementById('shortAttendanceProgramFilter')?.value||'__ALL__');
+  if(!groups.length){toast('No short-of-attendance records to report','warn');return;}
+  if(typeof ExcelJS==='undefined'){toast('Excel export library is not available. Please reload the app.','err');return;}
+  const wb=new ExcelJS.Workbook(); wb.creator='DHA Suffa University'; wb.title='Program-wise Short of Attendance';
+  const thin={style:'thin',color:{argb:'FF000000'}},border={top:thin,left:thin,bottom:thin,right:thin};
+  const titleFont={name:'Times New Roman',size:18,bold:true},headFont={name:'Times New Roman',size:11,bold:true},bodyFont={name:'Times New Roman',size:11};
+  const center={horizontal:'center',vertical:'middle',wrapText:true},left={horizontal:'left',vertical:'middle',wrapText:true};
+  groups.forEach(([program,items],gi)=>{
+    const safe=String(program).replace(/[\\\/?*\[\]:]/g,' ').slice(0,25)||'Program'; const ws=wb.addWorksheet(safe);
+    [8,18,28,14,48,18,35].forEach((w,i)=>ws.getColumn(i+1).width=w); ws.views=[{showGridLines:false}];
+    ws.pageSetup={paperSize:ws.PAPERSIZE_A4,orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0}; ws.pageMargins={left:.25,right:.25,top:.3,bottom:.3,header:0,footer:0};
+    ws.mergeCells('A1:G1');ws.getCell('A1').value=state.uniName||'DHA SUFFA UNIVERSITY';ws.getCell('A1').font=titleFont;ws.getCell('A1').alignment=center;ws.getRow(1).height=27;
+    ws.mergeCells('A2:G2');ws.getCell('A2').value=reportExamTitle();ws.getCell('A2').font={name:'Times New Roman',size:14,bold:true};ws.getCell('A2').alignment=center;ws.getRow(2).height=22;
+    ws.mergeCells('A3:G3');ws.getCell('A3').value=timetableDepartmentHeaderLabel();ws.getCell('A3').font={name:'Times New Roman',size:13,bold:true};ws.getCell('A3').alignment=center;ws.getRow(3).height=21;
+    ws.mergeCells('A4:G4');ws.getCell('A4').value=`SHORT OF ATTENDANCE — ${program}`;ws.getCell('A4').font={name:'Times New Roman',size:14,bold:true};ws.getCell('A4').alignment=center;ws.getRow(4).height=23;
+    ['S.No.','Reg No.','Student Name','Section','Short of Attendance Course(s)','Attendance %','Documents Required'].forEach((v,c)=>{const cell=ws.getCell(6,c+1);cell.value=v;cell.font=headFont;cell.alignment=center;cell.border=border;});
+    items.forEach((x,i)=>{const vals=[i+1,x.regNo,x.name,x.section||'--',x.courses.join('\n'),x.attendance.join(', ')||'--',x.documents.join(', ')||'--']; vals.forEach((v,c)=>{const cell=ws.getCell(7+i,c+1);cell.value=v;cell.font=bodyFont;cell.alignment=c===2?left:center;cell.border=border;});ws.getRow(7+i).height=Math.max(24,18*x.courses.length);});
+    ws.printArea=`A1:G${6+items.length}`;
+  });
+  const buf=await wb.xlsx.writeBuffer(),blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}); const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='short-of-attendance-program-wise-DSU.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  toast(`Downloaded Program-wise Short of Attendance Excel — ${groups.length} program(s), ${groups.reduce((n,g)=>n+g[1].length,0)} unique student(s)`,'ok');
+}
+function clearShortAttendance(){
+  if(!(state.shortAttendance||[]).length){toast('No short-attendance records to clear','warn');return;}
+  if(!confirm('Clear all Short of Attendance records?')) return;
+  state.shortAttendance=[]; save(); renderShortAttendance(); renderStudents(); toast('Short-attendance records cleared','ok');
+}
+
+/* ============= REQUIRED DOCUMENTS (Registration Document Defaulters) =============
+   Handles the official "List of Document Defaulters" workbook -- Reg No. / Name /
+   HSC Board / Remarks (e.g. "Documents Required Not Allowed"), often with a title
+   and blank rows above the real header row, so the header row is located by
+   scanning rather than assumed to be row 1. */
+function normalizeDocRemarks(s){ return String(s||'').replace(/\s+/g,' ').trim(); }
+function docRequiredForReg(regNo){
+  const reg = normalizeRegNo(regNo);
+  if(!reg) return null;
+  return (state.docRequired||[]).find(r=>normalizeRegNo(r.regNo)===reg) || null;
+}
+function syncDocRequiredLinks(){
+  state.docRequired = Array.isArray(state.docRequired)?state.docRequired:[];
+  state.docRequired.forEach(r=>{
+    const st = state.students.find(x=>normalizeRegNo(x.rollNo)===normalizeRegNo(r.regNo));
+    if(st) r.studentId = st.id;
+  });
+}
+function handleDocRequiredExcel(e){
+  const f=e.target.files[0]; if(!f) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const wb=XLSX.read(ev.target.result,{type:'array'}), recognized=[], skipped=[];
+      wb.SheetNames.forEach(sn=>{
+        const raw = XLSX.utils.sheet_to_json(wb.Sheets[sn], {header:1, defval:''});
+        if(!raw.length){ skipped.push(`"${sn}" (empty)`); return; }
+        // Scan the first few rows for the real header -- title text like
+        // "List of Document Defaulters" and blank rows often sit above it.
+        let headerRowIdx=-1, keys=null;
+        for(let i=0;i<Math.min(raw.length,15);i++){
+          const cand=(raw[i]||[]).map(v=>String(v||'').trim());
+          if(!cand.some(Boolean)) continue;
+          const hasReg = findHeaderKey(cand, ['registration number','reg number','reg no','registration no','roll no','roll number','student id']);
+          const hasName = findHeaderKey(cand, ['student name','name']);
+          if(hasReg && hasName){ headerRowIdx=i; keys=cand; break; }
+        }
+        if(headerRowIdx<0){ skipped.push(`"${sn}" (no Reg No./Name header found)`); return; }
+        const regKey = findHeaderKey(keys, ['registration number','reg number','reg no','registration no','roll no','roll number','student id']);
+        const nameKey = findHeaderKey(keys, ['student name','name']);
+        const boardKey = findHeaderKey(keys, ['hsc board','board']);
+        const remarksKey = findHeaderKey(keys, ['remarks','remark','status','note']);
+        const regIdx=keys.indexOf(regKey), nameIdx=keys.indexOf(nameKey);
+        const boardIdx=boardKey?keys.indexOf(boardKey):-1, remarksIdx=remarksKey?keys.indexOf(remarksKey):-1;
+        for(let i=headerRowIdx+1;i<raw.length;i++){
+          const row=raw[i]||[]; if(!row.some(v=>String(v||'').trim())) continue;
+          const reg=String(row[regIdx]||'').trim(); if(!reg) continue;
+          const name=String(row[nameIdx]||'').trim();
+          const hscBoard=boardIdx>=0?String(row[boardIdx]||'').trim():'';
+          const remarks=remarksIdx>=0?normalizeDocRemarks(row[remarksIdx]):'';
+          const st=state.students.find(x=>normalizeRegNo(x.rollNo)===normalizeRegNo(reg));
+          const rec={regNo:reg, name, hscBoard, remarks:remarks||'Documents Required Not Allowed', source:`Uploaded: ${sn}`};
+          if(st) rec.studentId=st.id;
+          recognized.push(rec);
+        }
+      });
+      state.docRequired=Array.isArray(state.docRequired)?state.docRequired:[];
+      recognized.forEach(rec=>{
+        const idx=state.docRequired.findIndex(x=>normalizeRegNo(x.regNo)===normalizeRegNo(rec.regNo));
+        if(idx>=0) state.docRequired[idx]={...state.docRequired[idx],...rec};
+        else state.docRequired.push(rec);
+      });
+      syncDocRequiredLinks(); save(); renderDocRequired(); renderStudents();
+      const unresolved=recognized.filter(x=>!x.studentId).length;
+      toast(`Recognized ${recognized.length} document-defaulter record(s)${unresolved?` (${unresolved} need student matching)`:''}`,'ok');
+      if(skipped.length) alert(`Document Defaulters import completed. Skipped sheets: ${skipped.join(', ')}`);
+    }catch(err){ console.error(err); toast('Document Defaulters Excel import failed: '+err.message,'err'); }
+    e.target.value='';
+  };
+  reader.readAsArrayBuffer(f);
+}
+function clearDocRequired(){
+  if(!(state.docRequired||[]).length){toast('No document-defaulter records to clear','warn');return;}
+  if(!confirm('Clear all Document Defaulter records?')) return;
+  state.docRequired=[]; save(); renderDocRequired(); renderStudents(); toast('Document-defaulter records cleared','ok');
+}
+function addManualDocRequired(){
+  const reg=(prompt('Reg No.:')||'').trim(); if(!reg) return;
+  const name=(prompt('Student name (optional):')||'').trim();
+  const remarks=normalizeDocRemarks(prompt('Remarks:','Documents Required Not Allowed')||'Documents Required Not Allowed');
+  const st=state.students.find(x=>normalizeRegNo(x.rollNo)===normalizeRegNo(reg));
+  state.docRequired=Array.isArray(state.docRequired)?state.docRequired:[];
+  state.docRequired.push({regNo:reg, name, hscBoard:'', remarks, studentId:st?st.id:undefined, source:'Manual'});
+  save(); renderDocRequired(); renderStudents();
+}
+function updateDocRequired(index,kind,value){
+  const r=(state.docRequired||[])[index]; if(!r) return;
+  if(kind==='remarks') r.remarks=normalizeDocRemarks(value);
+  else if(kind==='hscBoard') r.hscBoard=value;
+  save(); renderDocRequired(); renderStudents();
+}
+function delDocRequired(index){
+  state.docRequired=(state.docRequired||[]).filter((_,i)=>i!==index);
+  save(); renderDocRequired(); renderStudents();
+}
+function renderDocRequired(){
+  syncDocRequiredLinks();
+  const q=(document.getElementById('docRequiredSearch')?.value||'').toLowerCase().trim();
+  const rows=(state.docRequired||[]).map((r,index)=>{
+    const st=state.students.find(x=>x.id===r.studentId) || state.students.find(x=>normalizeRegNo(x.rollNo)===normalizeRegNo(r.regNo));
+    const studentName=st?.name || r.name || 'Unresolved student';
+    const hay=`${r.regNo} ${studentName} ${r.remarks}`.toLowerCase(); if(q && !hay.includes(q)) return '';
+    return `<tr style="${!st?'background:#fff7ed':''}">
+      <td style="font-family:monospace">${esc(r.regNo)}</td><td><b>${esc(studentName)}</b></td>
+      <td><input value="${esc(r.hscBoard||'')}" onchange="updateDocRequired(${index},'hscBoard',this.value)" style="width:100px"></td>
+      <td><input value="${esc(r.remarks||'')}" onchange="updateDocRequired(${index},'remarks',this.value)" style="width:260px"></td>
+      <td style="text-align:center"><span class="badge red">FLAGGED</span></td>
+      <td style="white-space:nowrap"><span class="badge gray">${esc(r.source||'Manual')}</span> <button class="btn sm danger" onclick="delDocRequired(${index})">×</button></td>
+    </tr>`;
+  }).join('');
+  const body=document.getElementById('docRequiredBody'); if(body) body.innerHTML=rows||'<tr><td colspan="6" class="empty-state">No document-defaulter records. Upload the official Excel sheet or add one manually.</td></tr>';
+  const records=state.docRequired||[], affected=new Set(records.map(r=>normalizeRegNo(r.regNo)).filter(Boolean));
+  const unresolved=records.filter(r=>!state.students.some(s=>normalizeRegNo(s.rollNo)===normalizeRegNo(r.regNo))).length;
+  const el=id=>document.getElementById(id);
+  if(el('docRequiredCount'))el('docRequiredCount').textContent=records.length;
+  if(el('docRequiredStudentCount'))el('docRequiredStudentCount').textContent=affected.size;
+  if(el('docRequiredUnresolvedCount'))el('docRequiredUnresolvedCount').textContent=unresolved;
+}
+// Combines every remark that applies to a Reg No. into one printable string,
+// used in the Remarks column of the Seating Plan / Notice Board reports.
+function combinedRemarks(regNo, courseTitle){
+  const parts=[];
+  if(shortAttendanceForRegCourse(regNo,courseTitle)) parts.push('SHORT OF ATTENDANCE');
+  const dr=docRequiredForReg(regNo);
+  if(dr) parts.push(String(dr.remarks||'DOCUMENTS REQUIRED').toUpperCase());
+  return parts.join(' / ');
+}
+function handleShortAttendanceExcel(e){
+  const f=e.target.files[0]; if(!f) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const wb=XLSX.read(ev.target.result,{type:'array'}), recognized=[], skipped=[];
+      wb.SheetNames.forEach(sn=>{
+        const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:''}); if(!rows.length) return;
+        const keys=Object.keys(rows[0]);
+        const courseKey=findHeaderKey(keys,['CourseName','Course Name','Course Title','Course']);
+        const regKey=findHeaderKey(keys,['Username_StudentRegNo','StudentRegNo','Student Reg No','Registration Number','Reg No','Roll No']);
+        const pctKey=findHeaderKey(keys,['Total_Percentage','Total Percentage','Attendance Percentage','Percentage']);
+        const eligKey=findHeaderKey(keys,['Eligibility','Eligibility Status','Status']);
+        if(!courseKey||!regKey||!eligKey){skipped.push(sn);return;}
+        rows.forEach(row=>{
+          const eligibility=String(row[eligKey]||'').trim(); if(!/ineligible/i.test(eligibility)) return;
+          const reg=String(row[regKey]||'').trim(), courseName=String(row[courseKey]||'').trim(); if(!reg||!courseName) return;
+          const st=state.students.find(x=>normalizeRegNo(x.rollNo)===normalizeRegNo(reg));
+          const cands=state.courses.filter(c=>normalizeAttendanceCourseName(c.title)===normalizeAttendanceCourseName(courseName));
+          const course=st&&cands.length>1?cands.find(c=>(st.courseIds||[]).includes(c.id)):cands[0];
+          const existing=shortAttendanceForRegCourse(reg,courseName);
+          const rec=existing||{regNo:reg,courseName,attendancePercentage:pctKey?row[pctKey]:'',eligibility,documentsRequired:[],documentsNote:'',source:`Uploaded: ${sn}`};
+          rec.regNo=reg; rec.courseName=courseName; rec.attendancePercentage=pctKey?row[pctKey]:rec.attendancePercentage; rec.eligibility=eligibility; rec.source=`Uploaded: ${sn}`;
+          if(st) rec.studentId=st.id; if(course) rec.courseId=course.id; recognized.push(rec);
+        });
+      });
+      state.shortAttendance=Array.isArray(state.shortAttendance)?state.shortAttendance:[];
+      recognized.forEach(rec=>{const idx=state.shortAttendance.findIndex(x=>shortAttendanceKey(x.regNo,x.courseName)===shortAttendanceKey(rec.regNo,rec.courseName)); if(idx>=0) state.shortAttendance[idx]={...state.shortAttendance[idx],...rec}; else state.shortAttendance.push(rec);});
+      syncShortAttendanceLinks(); save(); renderShortAttendance(); renderStudents();
+      const unresolved=recognized.filter(x=>!x.studentId||!x.courseId).length;
+      toast(`Recognized ${recognized.length} ineligible entries as SHORT OF ATTENDANCE${unresolved?` (${unresolved} need course/student matching)`:''}`,'ok');
+      if(skipped.length) alert(`Attendance import completed. Skipped sheets without the required columns: ${skipped.join(', ')}`);
+    }catch(err){console.error(err);toast('Short attendance Excel import failed: '+err.message,'err');}
+    e.target.value='';
+  };
+  reader.readAsArrayBuffer(f);
+}
+
+/* ============= UNSCHEDULED PAPERS ============= */
+function unscheduledCourses(){
+  const scheduledIds = new Set(state.scheduled.map(s=>s.courseId));
+  return eligible().filter(c=>!scheduledIds.has(c.id));
+}
+const _selectedUnscheduled = new Set();
+function toggleSelectAllUnscheduled(checked){
+  const list = unscheduledCourses();
+  if(checked) list.forEach(c=>_selectedUnscheduled.add(c.id));
+  else _selectedUnscheduled.clear();
+  renderUnscheduled();
+}
+function toggleUnscheduledSelect(id, checked){
+  if(checked) _selectedUnscheduled.add(id); else _selectedUnscheduled.delete(id);
+  const selAll = document.getElementById('unschedSelectAll');
+  const list = unscheduledCourses();
+  if(selAll) selAll.checked = list.length>0 && list.every(c=>_selectedUnscheduled.has(c.id));
+}
+function deleteSelectedUnscheduled(){
+  if(!_selectedUnscheduled.size){ toast('No papers selected','warn'); return; }
+  const n = _selectedUnscheduled.size;
+  if(!confirm(`Delete ${n} unscheduled course${n===1?'':'s'}? This removes the course, its enrollment links, and any seating/park records tied to it -- this cannot be undone.`)) return;
+  const ids = new Set(_selectedUnscheduled);
+  state.courses = state.courses.filter(c=>!ids.has(c.id));
+  state.students.forEach(s=>{ s.courseIds = (s.courseIds||[]).filter(cid=>!ids.has(cid)); });
+  state.scheduled = state.scheduled.filter(s=>!ids.has(s.courseId));
+  state.seating = state.seating.filter(s=>!ids.has(s.courseId));
+  state.parkedStudents = (state.parkedStudents||[]).filter(p=>!ids.has(p.courseId));
+  state.manualSeatOverrides = (state.manualSeatOverrides||[]).filter(o=>!ids.has(o.courseId));
+  invalidateRosterCache();
+  _selectedUnscheduled.clear();
+  save(); render();
+  toast(`Deleted ${n} unscheduled course${n===1?'':'s'}`,'ok');
+}
+function renderUnscheduled(){
+  const v = document.getElementById('unscheduledBody'); if(!v) return;
+  const list = unscheduledCourses();
+  document.getElementById('unschedCount').textContent = list.length;
+  // Drop stale selections for courses that got scheduled/deleted elsewhere
+  const liveIds = new Set(list.map(c=>c.id));
+  [..._selectedUnscheduled].forEach(id=>{ if(!liveIds.has(id)) _selectedUnscheduled.delete(id); });
+  const selAll = document.getElementById('unschedSelectAll');
+  if(selAll) selAll.checked = list.length>0 && list.every(c=>_selectedUnscheduled.has(c.id));
+  v.innerHTML = list.map(c => `
+    <tr>
+      <td><input type="checkbox" ${_selectedUnscheduled.has(c.id)?'checked':''} onchange="toggleUnscheduledSelect('${c.id}',this.checked)"></td>
+      <td style="font-family:monospace">${esc(c.code)}</td>
+      <td>${esc(c.title)}</td>
+      <td>${esc(c.program)}</td>
+      <td>${esc(c.section)}</td>
+      <td>${esc(c.faculty||'--')}</td>
+      <td>${c.studentCount||0}</td>
+    </tr>`).join('') || `<tr><td colspan="7" class="empty-state">✓ Every eligible course is scheduled.</td></tr>`;
+}
+
+/* ============= UNSCHEDULED PAPERS -- MANUAL SEATING TAB ============= */
+// Lets an unscheduled paper's students be parked against any session (even
+// one it isn't officially scheduled in) so they can then be dragged onto
+// empty seats from the Student Park, exactly like clash students. This never
+// touches state.scheduled -- the paper stays "unscheduled" on the timetable
+// even after its students are manually seated.
+/* Return only the student-course records that still need seating.
+   This is deliberately based on the LIVE seating array, not on a cached count,
+   so Auto Seating, manual drag/drop, clash placement and reseating all stay in
+   sync with Unscheduled Papers. */
+function unseatedStudentIdsForCourse(courseId){
+  const enrolled = studentsOf(courseId);
+  if(!enrolled.length) return [];
+  const seated = new Set((state.seating||[])
+    .filter(s=>s.courseId===courseId)
+    .map(s=>s.studentId));
+  return enrolled.filter(id=>!seated.has(id));
+}
+
+function reconcileParkedWithSeating(){
+  if(!Array.isArray(state.parkedStudents) || !state.parkedStudents.length) return false;
+  const seatedKeys = new Set((state.seating||[]).map(s=>`${s.sessionId}|${s.studentId}|${s.courseId}`));
+  const before = state.parkedStudents.length;
+  state.parkedStudents = state.parkedStudents.filter(p=>!seatedKeys.has(`${p.sessionId}|${p.studentId}|${p.courseId}`));
+  return state.parkedStudents.length !== before;
+}
+
+function renderUnscheduledSeating(){
+  const v = document.getElementById('unschedSeatingList'); if(!v) return;
+  // Clean stale park entries first: a student who now has a real seat must
+  // never remain visible as a pending/parked student.
+  const parkChanged = reconcileParkedWithSeating();
+  if(parkChanged) save();
+
+  const rawList = unscheduledCourses();
+  // A course remains here only while at least one of its enrolled students is
+  // genuinely unseated. Fully seated papers disappear automatically.
+  const list = rawList.map(c=>({c, pendingIds:unseatedStudentIdsForCourse(c.id)}))
+    .filter(x=>x.pendingIds.length || !studentsOf(x.c.id).length);
+  const countEl = document.getElementById('unschedSeatingCount');
+  if(countEl) countEl.textContent = list.length;
+  const tabBadge = document.getElementById('unschedSeatingTabCount');
+  if(tabBadge) tabBadge.textContent = list.length ? list.length : '';
+  if(!state.sessions.length){
+    v.innerHTML = '<div class="empty-state">Add an exam session first (Exam Settings tab) before parking unscheduled papers.</div>';
+    return;
+  }
+  v.innerHTML = list.length ? list.map(({c,pendingIds})=>{
+    const sids = studentsOf(c.id);
+    const parkedCount = (state.parkedStudents||[]).filter(p=>p.courseId===c.id && pendingIds.includes(p.studentId)).length;
+    const seatedCount = Math.max(0, sids.length - pendingIds.length);
+    const statusBadges = `${parkedCount?`<span class="badge" style="background:#ede9fe;color:#6d28d9">🅿️ ${parkedCount} parked</span>`:''}
+      ${seatedCount?`<span class="badge green">🪑 ${seatedCount} seated</span>`:''}`;
+    const pendingNames = pendingIds.slice(0,12).map(sid=>{
+      const st=state.students.find(x=>x.id===sid);
+      const parked=(state.parkedStudents||[]).some(p=>p.courseId===c.id&&p.studentId===sid);
+      return `<span style="display:inline-block;margin:2px 4px 2px 0;padding:3px 7px;border:1px solid #e2e8f0;border-radius:12px;background:${parked?'#f5f3ff':'#fff'}">${esc(st?.rollNo||sid)} — ${esc(st?.name||sid)}${parked?' 🅿️':''}</span>`;
+    }).join('');
+    const more=pendingIds.length>12?` <span class="desc">+${pendingIds.length-12} more</span>`:'';
+    return `<div class="unsched-seat-card">
+      <div class="usc-top">
+        <div style="flex:1;min-width:0">
+          <div class="usc-title">${esc(c.code)} <span style="font-weight:400;color:var(--mut)">— ${esc(c.title)}</span></div>
+          <div class="usc-meta">${esc(c.program)} ${esc(c.section)} · ${esc(c.faculty||'--')} · <b>${pendingIds.length}</b> pending of ${sids.length} student${sids.length===1?'':'s'} ${statusBadges}</div>
+          <div style="margin-top:6px;line-height:1.6">${pendingNames}${more}</div>
+        </div>
+        <div class="usc-actions">
+          <select id="unschedSession_${esc(c.id)}" style="min-width:190px" aria-label="Session to park ${esc(c.code)} against">
+            ${state.sessions.map(s=>`<option value="${s.id}">${esc(s.label)} · ${esc(s.date)} · ${esc(s.startTime)}-${esc(s.endTime)}</option>`).join('')}
+          </select>
+          <button class="btn sm" style="background:var(--tl);border-color:var(--tl)" onclick="parkUnscheduledCourse('${esc(c.id)}')" title="Send only students who are still unseated for this paper to the Student Park">🅿️ Park Pending</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('') : '<div class="empty-state">✓ No unscheduled paper has unseated students -- all currently seated students have been removed from this list.</div>';
+}
+function parkUnscheduledCourse(courseId){
+  const c = state.courses.find(x=>x.id===courseId); if(!c){ toast('Course not found','err'); return; }
+  const sel = document.getElementById('unschedSession_'+courseId);
+  const sessionId = sel ? sel.value : '';
+  const sess = state.sessions.find(x=>x.id===sessionId);
+  if(!sess){ toast('Pick a session first','warn'); return; }
+  const sids = unseatedStudentIdsForCourse(courseId);
+  if(!sids.length){
+    renderUnscheduledSeating();
+    toast(`All ${c.code} students are already seated`,'warn');
+    return;
+  }
+  let added = 0;
+  sids.forEach(sid=>{ if(addStudentToPark(sessionId, sid, courseId)) added++; });
+  if(!added){ toast(`All ${c.code} students are already parked for ${sess.label} · ${sess.date}`,'warn'); return; }
+  _parkSessionId = sessionId;
+  save();
+  renderUnscheduledSeating();
+  toast(`✓ ${added} student${added===1?'':'s'} from ${c.code} parked for ${sess.label} · ${sess.date} -- switch to Seating Rooms and drag them onto empty seats`,'ok');
+}
+
+/* ============= STUDENT OCCUPANCY VIEW ============= */
+function renderStudentOccupancy(){
+  const v = document.getElementById('studentOccupancyView');
+  if(!v) return;
+  const q = (document.getElementById('stuOccSearch')?.value||'').toLowerCase();
+  if(!state.sessions.length){
+    v.innerHTML = '<div class="empty-state">Add sessions first.</div>';
+    document.getElementById('stuConflCount').textContent = '0';
+    return;
+  }
+
+  // Build per-student data: for each session list scheduled course(s)
+  const sessionsSorted = [...state.sessions].sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime));
+  const courseSession = new Map(); // courseId -> sessionId
+  state.scheduled.forEach(sc=>courseSession.set(sc.courseId, sc.sessionId));
+
+  let conflictCount = 0;
+  const rows = state.students.map(st=>{
+    if(q && !(`${st.rollNo} ${st.name} ${st.program} ${st.section}`).toLowerCase().includes(q)) return null;
+    // session -> [courseIds]
+    const map = new Map();
+    (st.courseIds||[]).forEach(cid=>{
+      const sid = courseSession.get(cid);
+      if(!sid) return;
+      if(!map.has(sid)) map.set(sid,[]);
+      map.get(sid).push(cid);
+    });
+    const hasClash = [...map.values()].some(arr=>arr.length>1);
+    if(hasClash) conflictCount++;
+
+    const cells = sessionsSorted.map(sess=>{
+      const arr = map.get(sess.id)||[];
+      if(!arr.length){
+        return `<td style="background:#f0fdf4;color:#15803d;font-size:10.5px;text-align:center" title="${esc(sess.label)} ${sess.date} ${sess.startTime}-${sess.endTime} -- FREE">FREE</td>`;
+      }
+      const items = arr.map(cid=>{
+        const c = state.courses.find(x=>x.id===cid);
+        if(!c) return '';
+        const danger = arr.length>1;
+        const removeBtn = `<button title="Remove ${esc(c.code)} from ${esc(st.rollNo)}" onclick="if(confirm('Remove ${esc(c.code)} from ${esc(st.rollNo)}?'))unenrollStudentFromCourse('${st.id}','${c.id}')" style="background:${danger?'#fecaca':'#e0e7ff'};color:${danger?'#b91c1c':'#3730a3'};border:1px solid ${danger?'#fca5a5':'#c7d2fe'};border-radius:50%;width:16px;height:16px;line-height:12px;font-size:10px;cursor:pointer;padding:0;margin-right:4px;font-weight:bold">✕</button>`;
+        return `<div style="display:flex;align-items:center;gap:2px;margin:1px 0">${removeBtn}<span style="font-family:monospace;font-size:10.5px">${esc(c.code)}</span></div>`;
+      }).join('');
+      const bg = arr.length>1 ? '#fee2e2' : '#eff6ff';
+      const border = arr.length>1 ? 'border:2px solid #ef4444;' : '';
+      return `<td style="background:${bg};${border}font-size:11px">${items}${arr.length>1?`<div style="font-size:9.5px;color:#b91c1c;font-weight:600;margin-top:2px">⚠ CLASH</div>`:''}</td>`;
+    }).join('');
+
+    return `<tr style="${hasClash?'background:#fff5f5':''}">
+      <td style="font-family:monospace;font-size:11px;white-space:nowrap">${esc(st.rollNo)}</td>
+      <td style="font-size:11px;white-space:nowrap">${esc(st.name)}</td>
+      <td style="font-size:11px">${esc(st.program)}</td>
+      ${cells}
+    </tr>`;
+  }).filter(Boolean).join('');
+
+  document.getElementById('stuConflCount').textContent = conflictCount;
+
+  const headCells = sessionsSorted.map(s=>
+    `<th style="font-size:10px;writing-mode:vertical-rl;transform:rotate(180deg);min-width:32px;padding:6px 2px"><b>${esc(s.label)}</b><br><span style="color:var(--mut);font-weight:400">${s.date} ${s.startTime}</span></th>`
+  ).join('');
+
+  // Per-session free count summary
+  const freeSummary = sessionsSorted.map(sess=>{
+    let free=0;
+    state.students.forEach(st=>{
+      const has = (st.courseIds||[]).some(cid=>courseSession.get(cid)===sess.id);
+      if(!has) free++;
+    });
+    return `<span class="badge" style="background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0">${esc(sess.label)} ${sess.date}: ${free} students free</span>`;
+  }).join(' ');
+
+  v.innerHTML = `
+    <div style="margin-bottom:10px;display:flex;flex-wrap:wrap;gap:6px">${freeSummary}</div>
+    <div class="tbl-wrap" style="max-height:600px">
+      <table>
+        <thead><tr><th>Roll No</th><th>Name</th><th>Program</th>${headCells}</tr></thead>
+        <tbody>${rows||`<tr><td colspan="${3+sessionsSorted.length}" class="empty-state">No students match.</td></tr>`}</tbody>
+      </table>
+    </div>`;
+}
+
+
+/* ================= COURSE-WISE CLASH ANALYSIS ================= */
+
+function buildCourseClashAnalysis(){
+  const result=[], pairSeen=new Set();
+  for(const sess of state.sessions){
+    const exIds=state.scheduled.filter(sc=>sc.sessionId===sess.id).map(sc=>sc.courseId);
+    for(let i=0;i<exIds.length;i++) for(let j=i+1;j<exIds.length;j++){
+      const aId=exIds[i], bId=exIds[j];
+      const pairKey=[aId,bId].sort().join('|')+'|'+sess.id;
+      if(pairSeen.has(pairKey)) continue;
+      const a=state.courses.find(c=>c.id===aId), b=state.courses.find(c=>c.id===bId);
+      if(!a||!b) continue;
+      const aStudents=new Set(studentsOf(aId));
+      const clashIds=studentsOf(bId).filter(sid=>aStudents.has(sid));
+      if(!clashIds.length) continue;
+      pairSeen.add(pairKey);
+      const students=clashIds.map(sid=>state.students.find(st=>st.id===sid)).filter(Boolean)
+        .sort((x,y)=>String(x.rollNo||'').localeCompare(String(y.rollNo||'')));
+      const recommendations=[];
+      for(const moveId of [aId,bId]){
+        const moveCourse=state.courses.find(c=>c.id===moveId);
+        const current=state.scheduled.find(sc=>sc.courseId===moveId);
+        if(!moveCourse||!current) continue;
+        const candidates=state.sessions.filter(s=>s.id!==current.sessionId)
+          .map(s=>{
+            const impact=previewMoveImpact(moveId,s.id);
+            const targetLoad=sessionCapUsed(s.id);
+            const courseLoad=studentsOf(moveId).length || (moveCourse.studentCount||0);
+            if(!impact||!impact.safe || targetLoad+courseLoad>totalRoomCap()) return null;
+            return {sessionId:s.id,date:s.date,day:s.day||dayName(s.date),label:s.label,
+              time:`${s.startTime}-${s.endTime}`,used:targetLoad,moveCourseId:moveId,
+              moveCourseCode:moveCourse.code,impact,sameDay:s.date===sess.date};
+          }).filter(Boolean)
+          .sort((x,y)=>(x.sameDay?1:0)-(y.sameDay?1:0) || x.used-y.used);
+        if(candidates.length) recommendations.push(candidates[0]);
+      }
+      recommendations.sort((x,y)=>(x.sameDay?1:0)-(y.sameDay?1:0)||x.used-y.used);
+      result.push({key:pairKey,sessionId:sess.id,date:sess.date,day:sess.day||dayName(sess.date),
+        sessionLabel:sess.label,time:`${sess.startTime}-${sess.endTime}`,courseA:a,courseB:b,
+        students,studentIds:clashIds,recommendations});
+    }
+  }
+  return result;
+}
+
+function courseClashRecommendationHTML(item){
+  if(!item.recommendations.length)
+    return `<div class="confl" style="margin-top:10px"><b>⚠ No safe move found.</b> Add another exam day/session or manually adjust the schedule.</div>`;
+  const r=item.recommendations[0];
+  const affected=r.moveCourseId===item.courseA.id?item.courseA:item.courseB;
+  const label=r.sameDay?`<span class="badge red">Same-day fallback</span>`:`<span class="badge green">Recommended different day</span>`;
+  return `<div style="margin-top:10px;padding:12px;border:1px solid #bbf7d0;border-radius:6px;background:#f0fdf4">
+    <div style="font-weight:700;color:var(--grn);margin-bottom:5px">💡 Suggested resolution ${label}</div>
+    <div>Move <b>${esc(affected.code)}</b> to <b>${esc(r.day)}</b> (${esc(r.date)}) — <b>${esc(r.label)}</b>, ${esc(r.time)}.</div>
+    <div class="desc" style="margin-top:4px">Predicted result: <b>0 new student clashes</b>, <b>0 faculty clashes</b>, <b>0 daily-overload violations</b>. Target session load: ${r.used} students.</div>
+    <button class="autofix-btn" style="margin-top:7px" onclick="moveCourseToSession('${r.moveCourseId}','${r.sessionId}');renderCourseClashes()">⚡ Move ${esc(affected.code)} → ${esc(r.day)}</button>
+  </div>`;
+}
+
+function renderCourseClashes(){
+  const v=document.getElementById('courseClashesView'); if(!v) return;
+  const all=buildCourseClashAnalysis();
+  // Same idea as the Manual Seating Queue's seatedLookup: a student who has
+  // been dragged onto a seat for EITHER course in this clash pair (via the
+  // Seating tab, manual or auto) has had this particular clash "settled"
+  // for seating purposes -- they know which exam they're actually sitting.
+  // Previously this tab had no idea seating had happened at all, so a
+  // clash stayed listed as fully outstanding forever, even after you'd
+  // already placed everyone in the Seating tab.
+  const seatedLookup=new Map();
+  state.seating.forEach(s=>{ seatedLookup.set(`${s.sessionId}|${s.studentId}|${s.courseId}`, s); });
+  const q=(document.getElementById('courseClashSearch')?.value||'').trim().toLowerCase();
+  const filtered=all.filter(x=>{
+    if(!q) return true;
+    const hay=[x.courseA.code,x.courseA.title,x.courseA.program,x.courseA.section,
+      x.courseB.code,x.courseB.title,x.courseB.program,x.courseB.section,
+      ...x.students.map(s=>`${s.rollNo} ${s.name}`)].join(' ').toLowerCase();
+    return hay.includes(q);
+  });
+  const affected=new Set(all.flatMap(x=>x.studentIds)), noSafe=all.filter(x=>!x.recommendations.length).length;
+  const settledStudentIds=new Set();
+  all.forEach(x=>x.studentIds.forEach(sid=>{
+    if(seatedLookup.has(`${x.sessionId}|${sid}|${x.courseA.id}`)||seatedLookup.has(`${x.sessionId}|${sid}|${x.courseB.id}`)) settledStudentIds.add(sid);
+  }));
+  document.getElementById('courseClashStats').innerHTML=`
+    <div class="stat"><div class="lbl">Course Clash Pairs</div><div class="val" style="color:var(--red)">${all.length}</div></div>
+    <div class="stat"><div class="lbl">Affected Students</div><div class="val">${affected.size}</div></div>
+    <div class="stat"><div class="lbl">Seated in Seating Tab</div><div class="val" style="color:var(--grn)">${settledStudentIds.size} / ${affected.size}</div></div>
+    <div class="stat"><div class="lbl">Pairs With Safe Move</div><div class="val" style="color:var(--grn)">${all.length-noSafe}</div></div>
+    <div class="stat"><div class="lbl">No Safe Move</div><div class="val" style="color:var(--red)">${noSafe}</div></div>`;
+  if(!all.length){v.innerHTML='<div class="empty-state" style="color:var(--grn)">✓ No course-wise student clashes detected in the current schedule.</div>';return;}
+  if(!filtered.length){v.innerHTML='<div class="empty-state">No clashes match your search.</div>';return;}
+  v.innerHTML=filtered.map(x=>{
+    const settledInPair=x.studentIds.filter(sid=>settledStudentIds.has(sid)).length;
+    const rows=x.students.map((s,n)=>{
+      const seatA=seatedLookup.get(`${x.sessionId}|${s.id}|${x.courseA.id}`);
+      const seatB=seatedLookup.get(`${x.sessionId}|${s.id}|${x.courseB.id}`);
+      const seat=seatA||seatB;
+      let statusCell='<span class="badge gray">Not seated</span>';
+      if(seat){
+        const c=seat===seatA?x.courseA:x.courseB;
+        const room=state.rooms.find(r=>r.id===seat.roomId);
+        statusCell=`<span class="badge green" title="${esc(room?room.name:seat.roomId)}, Row ${seat.row}, Column ${seat.col}">✓ Seated — ${esc(c.code)}</span>`;
+      }
+      return `<tr><td>${n+1}</td><td style="font-family:monospace">${esc(s.rollNo)}</td><td><b>${esc(s.name)}</b></td><td>${esc(s.program||'')}</td><td>${esc(s.section||'')}</td><td>${statusCell}</td></tr>`;
+    }).join('');
+    return `<div class="card" style="border-left:4px solid var(--red)">
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div><h3 style="margin-bottom:4px">⚠ ${esc(x.courseA.code)} <span style="color:var(--red)">↔</span> ${esc(x.courseB.code)}</h3>
+        <div class="desc" style="margin-bottom:0">${esc(x.date)} (${esc(x.day)}) · ${esc(x.sessionLabel)} · ${esc(x.time)}</div></div>
+        <div style="display:flex;gap:6px;align-items:center">
+          ${settledInPair ? `<span class="badge green">${settledInPair}/${x.students.length} seated</span>` : ''}
+          <span class="badge red">${x.students.length} affected student${x.students.length===1?'':'s'}</span>
+        </div>
+      </div>
+      <div class="grid2" style="margin-top:10px">
+        <div style="padding:10px;background:#fef2f2;border-radius:6px"><b>${esc(x.courseA.code)} — ${esc(x.courseA.title)}</b><div class="desc">${esc(x.courseA.program)} · Section ${esc(x.courseA.section)} · ${esc(x.courseA.faculty||'Faculty not set')}</div></div>
+        <div style="padding:10px;background:#fef2f2;border-radius:6px"><b>${esc(x.courseB.code)} — ${esc(x.courseB.title)}</b><div class="desc">${esc(x.courseB.program)} · Section ${esc(x.courseB.section)} · ${esc(x.courseB.faculty||'Faculty not set')}</div></div>
+      </div>
+      <div style="margin-top:10px"><b>👥 Students with both exams</b>
+        <div class="tbl-wrap" style="max-height:260px;margin-top:6px"><table><thead><tr><th>#</th><th>Roll No</th><th>Student Name</th><th>Program</th><th>Section</th><th>Seating Status</th></tr></thead><tbody>${rows}</tbody></table></div>
+      </div>
+      ${courseClashRecommendationHTML(x)}
+    </div>`;
+  }).join('');
+}
+
+/* ================= SCHEDULE VIEW ================= */
+function isCourseGrouped(course){
+  if(!course) return false;
+  if(state.mergeSectionsByCode){
+    const codeKey = String(course.code||'').trim().toUpperCase();
+    if(codeKey && state.courses.filter(c=>String(c.code||'').trim().toUpperCase()===codeKey).length > 1) return true;
+    const titleKey = String(course.title||'').trim().toUpperCase();
+    if(titleKey && state.courses.filter(c=>String(c.title||'').trim().toUpperCase()===titleKey).length > 1) return true;
+  }
+  return (state.schedulingGroups||[]).some(g => (g.courseIds||[]).includes(course.id) && (g.courseIds||[]).length>1);
+}
+function renderCourseGroupsCard(){
+  const el = document.getElementById('courseGroupsList');
+  if(!el) return;
+  const groups = state.schedulingGroups || [];
+  if(!groups.length){
+    el.innerHTML = '<div class="empty-state" style="padding:10px 0">No manual course groups yet. Section grouping (same course code or same course name) is handled automatically above.</div>';
+    return;
+  }
+  el.innerHTML = groups.map(g => {
+    const courses = (g.courseIds||[]).map(id=>state.courses.find(c=>c.id===id)).filter(Boolean);
+    return `<div class="row" style="justify-content:space-between;border:1px solid var(--bd);border-radius:8px;padding:8px 10px;margin-top:6px">
+      <div><b>${esc(g.name||'Group')}</b> — ${courses.map(c=>esc(c.code)+' ('+esc(c.section)+')').join(', ') || '<i>no courses</i>'}</div>
+      <button class="btn sm ghost" onclick="removeCourseGroup('${g.id}')">✕ Remove</button>
+    </div>`;
+  }).join('');
+}
+function removeCourseGroup(id){
+  state.schedulingGroups = (state.schedulingGroups||[]).filter(g=>g.id!==id);
+  save(); renderCourseGroupsCard();
+  toast('Group removed -- re-run Auto Schedule to apply','ok');
+}
+function openCourseGroupBuilder(){
+  const name = prompt('Group name (e.g. "Elective Block A"):');
+  if(name===null) return;
+  const codes = prompt('Enter the course CODES to force into the same session, comma-separated (e.g. CS101, CS101L, MG205):');
+  if(codes===null) return;
+  const wanted = codes.split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+  if(wanted.length < 2){ toast('Enter at least 2 course codes','err'); return; }
+  const matched = state.courses.filter(c => wanted.includes(String(c.code||'').trim().toUpperCase()));
+  if(matched.length < 2){ toast('Could not find 2+ matching course codes -- check spelling','err'); return; }
+  state.schedulingGroups = state.schedulingGroups || [];
+  state.schedulingGroups.push({id: uid(), name: name || 'Group', courseIds: matched.map(c=>c.id)});
+  save(); renderCourseGroupsCard();
+  toast(`Group created with ${matched.length} course(s) -- re-run Auto Schedule to apply`,'ok');
+}
+function renderSchedule(){
+  const cm = document.getElementById('chkMergeSections'); if(cm) cm.checked = state.mergeSectionsByCode !== false;
+  const ct = document.getElementById('chkTeacherDays'); if(ct) ct.checked = state.groupTeacherDays !== false;
+  const v = document.getElementById('scheduleView');
+  if(!v) return;
+  if(!state.scheduled.length){
+    v.innerHTML = '<div class="empty-state">No schedule yet -- click ⚡ Auto Schedule.</div>';
+    return;
+  }
+  const dates = [...new Set(state.sessions.map(s=>s.date))].sort();
+  v.innerHTML = dates.map(date => {
+    const daySessions = state.sessions.filter(s=>s.date===date);
+    return `<div class="card"><h3>📅 ${date}</h3>` +
+      daySessions.map(sess => {
+        const exams = state.scheduled.filter(s=>s.sessionId===sess.id);
+        if(!exams.length) return '';
+        const rows = exams.map(ex => {
+          const c = state.courses.find(x=>x.id===ex.courseId);
+          if(!c) return '';
+          // Build move-to options with predicted impact in each label
+          const opts = state.sessions.filter(s=>s.id!==sess.id).map(s=>{
+            const imp = previewMoveImpact(c.id, s.id);
+            const tag = imp ? (imp.safe ? '✓ safe' :
+              `⚠ ${[
+                imp.newClashes?`${imp.newClashes} clash`:'',
+                imp.facClash?'faculty':'',
+                imp.overloads?`${imp.overloads}>${imp.maxPerDay}/day${imp.threeOnDay?` (${imp.threeOnDay}×3+)`:''}`:''
+              ].filter(Boolean).join(', ')}`) : '';
+            return `<option value="${s.id}">${esc(s.label)} · ${s.date} ${s.startTime}-${s.endTime}  —  ${tag}</option>`;
+          }).join('');
+          const selId = `mv_${ex.id}`;
+          const grpTag = isCourseGrouped(c) ? ' <span class="badge" style="background:#dbeafe;color:#1e40af" title="Kept in the same session as its section/course/teacher group">🔗 grouped</span>' : '';
+          return `<tr>
+            <td><span style="font-family:monospace">${esc(c.code)}</span>${grpTag}</td>
+            <td>${esc(c.title)}</td>
+            <td><span class="badge">${esc(c.program)}</span></td>
+            <td>${esc(c.section)}</td>
+            <td>${esc(c.faculty||'--')}</td>
+            <td>${c.studentCount||0}</td>
+            <td>
+              <select id="${selId}" style="font-size:11px;max-width:260px"
+                onchange="if(this.value)tryMoveCourse('${c.id}',this.value,'${selId}')">
+                <option value="">↪ Move to…</option>
+                ${opts}
+              </select>
+            </td>
+          </tr>`;
+        }).join('');
+        return `<div class="section-room">
+          <h4>${esc(sess.label)} &nbsp; <small style="font-weight:400;color:var(--mut)">${sess.startTime}-${sess.endTime}</small></h4>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Code</th><th>Title</th><th>Program</th><th>Section</th><th>Faculty</th><th>Students</th><th>Move</th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>`;
+      }).join('') + '</div>';
+  }).join('') || '<div class="empty-state">No sessions have scheduled exams.</div>';
+}
+
+/* ================= STATS / RENDER ================= */
+function updateStats(){
+  document.getElementById('stCourses').textContent = state.courses.length;
+  document.getElementById('stRooms').textContent = state.rooms.length;
+  document.getElementById('stSessions').textContent = state.sessions.length;
+  document.getElementById('stStudents').textContent = state.students.length;
+  document.getElementById('stSched').textContent = state.scheduled.length;
+}
+function updateAll(){ render(); }
+function syncSeatingInput(){
+  const el = document.getElementById('seatsPerColInput');
+  if(el) el.value = state.seatsPerColumn || 8;
+  const mc = document.getElementById('maxCoursesPerRoomInput');
+  if(mc) mc.value = state.maxCoursesPerRoom || 4;
+}
+// Map every tab to the renderers that fill it. We only run the ones the user is looking at.
+const TAB_RENDERERS = {
+  data:         [renderCourses, updateStats],
+  rooms:        [renderRooms, updateStats],
+  sessions:     [renderSessions, updateStats],
+  exclusions:   [updateExclusions],
+  schedule:     [renderSchedule, renderCourseGroupsCard, updateStats],
+  // renderSeating already renders the Park sidebar. Rendering it a second time
+  // resets the browser's anchor immediately after a drag/drop.
+  seating:      [renderSeating, syncSeatingInput, renderManualGroups, renderQuickProgPicker, renderUnscheduledSeating],
+  conflicts:    [renderConflicts],
+  courseclashes:[renderCourseClashes],
+  occupancy:    [renderOccupancy],
+  stuoccupancy: [renderStudentOccupancy],
+  students:     [renderCourses, renderStudents, updateStats],
+  attendance:   [renderShortAttendance],
+  docrequired:  [renderDocRequired],
+  exports:      [],
+  deptsummary:  [renderDepartmentSummary]
+};
+function activeTab(){
+  const el = document.querySelector('.tab.active');
+  return el ? el.dataset.tab : 'data';
+}
+function renderActive(){
+  const fns = TAB_RENDERERS[activeTab()] || [];
+  for(const fn of fns){ try{ fn(); }catch(e){ console.error(e); } }
+  // Stats are cheap and live in the header — keep them fresh always
+  try{ updateStats(); }catch(e){}
+}
+function render(){
+  initSummaryReportControls();
+  // Re-render only the visible panel; others rebuild on tab switch via safeRender
+  renderActive();
+}
+
+/* ================= COURSE-WISE SEATING PLAN (exact DSU format) =================
+   Matches the "SEATING PLAN" / "Notice Board" sheet format of the official DSU
+   seating workbook: DHA SUFFA UNIVERSITY / <exam title> / SEATING PLAN header,
+   then one block per Class (course.section) + Course, each block carrying
+   Course Title / Session / Subject Teacher / Time / Date, followed by a table
+   of S.No., Reg No., Name, Seating Plan (COL-x / ROW-y), Room No., Remarks. */
+function romanNum(n){ return ['I','II','III','IV','V','VI','VII','VIII'][n-1] || String(n); }
+function periodName(label){
+  const l = String(label||'');
+  if(/morning/i.test(l)) return 'Morning';
+  if(/afternoon|mid/i.test(l)) return 'Afternoon';
+  if(/evening/i.test(l)) return 'Evening';
+  return l.replace(/\s*session\s*/i,'').trim() || l;
+}
+function milTime(t){ return String(t||'').replace(':',''); }
+function buildSeatingPlanBlocks(){
+  const sessionsSorted = [...state.sessions].sort((a,b)=> (a.date||'').localeCompare(b.date||'') || (a.startTime||'').localeCompare(b.startTime||''));
+  const byDate = {};
+  sessionsSorted.forEach(s=>{ (byDate[s.date]=byDate[s.date]||[]).push(s); });
+  const romanMap = {};
+  Object.values(byDate).forEach(arr=>{
+    arr.sort((a,b)=>(a.startTime||'').localeCompare(b.startTime||''));
+    arr.forEach((s,i)=> romanMap[s.id] = romanNum(i+1));
+  });
+  const blocks = [];
+  sessionsSorted.forEach(sess=>{
+    const seatsForSession = state.seating.filter(s=>s.sessionId===sess.id);
+    if(!seatsForSession.length) return;
+    const courseIds = [...new Set(seatsForSession.map(s=>s.courseId))];
+    const courseObjs = courseIds.map(cid=>state.courses.find(c=>c.id===cid)).filter(Boolean);
+    courseObjs.sort((a,b)=> (a.section||'').localeCompare(b.section||'') || (a.code||'').localeCompare(b.code||''));
+    courseObjs.forEach(course=>{
+      const seats = seatsForSession.filter(s=>s.courseId===course.id).map(s=>{
+        const stu = state.students.find(x=>x.id===s.studentId);
+        const room = state.rooms.find(r=>r.id===s.roomId);
+        return { rollNo: stu?stu.rollNo:s.studentId, name: stu?stu.name:s.studentId, roomName: room?room.name:'--', col:s.col, row:s.row };
+      });
+      seats.sort((a,b)=> String(a.rollNo).localeCompare(String(b.rollNo)));
+      const roomsUsed = [...new Set(seats.map(s=>s.roomName))];
+      blocks.push({
+        classLabel: course.section || course.program || course.code,
+        courseId: course.id,
+        courseTitle: course.title,
+        faculty: course.faculty||'',
+        sessionText: `(${romanMap[sess.id]||'I'}) - ${periodName(sess.label)}`,
+        timeText: `${milTime(sess.startTime)} to ${milTime(sess.endTime)} HRS`,
+        dateText: sess.date,
+        singleRoom: roomsUsed.length<=1,
+        roomName: roomsUsed[0]||'--',
+        rows: seats.map((s,i)=>({sno:i+1, reg:s.rollNo, name:s.name, seat:`COL-${s.col} / ROW-${s.row}`, room:s.roomName}))
+      });
+    });
+  });
+  return blocks;
+}
+function noticeBoardBlocks(){
+  const out=[];
+  buildSeatingPlanBlocks().forEach(b=>{
+    const byRoom={};
+    b.rows.forEach(r=>{ (byRoom[r.room]=byRoom[r.room]||[]).push(r); });
+    Object.keys(byRoom).sort().forEach(room=>{
+      out.push({...b, roomName:room, rows:byRoom[room].map((r,i)=>({...r,sno:i+1,room}))});
+    });
+  });
+  return out;
+}
+async function xlsxCourseWiseSeating(){
+  const blocks=buildSeatingPlanBlocks();
+  if(!blocks.length){toast('No seating data yet -- run Generate Seating first','warn');return;}
+  if(typeof ExcelJS==='undefined'){toast('Excel export library is not available. Please reload the app.','err');return;}
+  const wb=new ExcelJS.Workbook();
+  wb.creator='DHA Suffa University';
+  wb.subject='DSU Seating Plan and Notice Board';
+  wb.title='DSU Course-wise Seating Plan';
+  const thin={style:'thin',color:{argb:'FF000000'}};
+  const border={top:thin,left:thin,bottom:thin,right:thin};
+  const titleFont={name:'Times New Roman',size:18,bold:true};
+  const examFont={name:'Times New Roman',size:16,bold:true};
+  const sectionFont={name:'Bookman Old Style',size:18,bold:true};
+  const labelFont={name:'Times New Roman',size:14,bold:true};
+  const bodyFont={name:'Times New Roman',size:12};
+  const headFont={name:'Times New Roman',size:12,bold:true};
+  const center={horizontal:'center',vertical:'middle',wrapText:true};
+  const leftAlign={horizontal:'left',vertical:'middle',wrapText:true};
+  function setup(ws, widths){
+    widths.forEach((w,i)=>ws.getColumn(i+1).width=w);
+    ws.pageSetup={paperSize:ws.PAPERSIZE_A4,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0};
+    ws.pageMargins={left:.25,right:.25,top:.25,bottom:.25,header:0,footer:0};
+    ws.views=[{showGridLines:false}];
+  }
+  function mergeText(ws,row,startCol,endCol,text,font,align=center,height){
+    ws.mergeCells(row,startCol,row,endCol); const c=ws.getCell(row,startCol); c.value=text;c.font=font;c.alignment=align;ws.getRow(row).height=height;
+  }
+  const ws=wb.addWorksheet('Seating Plan'); setup(ws,[7,15,32,18,14,28]);
+  let r=1;
+  mergeText(ws,r,1,6,state.uniName||'DHA SUFFA UNIVERSITY',titleFont,center,26); r++;
+  mergeText(ws,r,1,6,reportExamTitle(),examFont,center,20); r++;
+  mergeText(ws,r,1,6,excelDepartmentHeaderLabel(),{name:'Times New Roman',size:15,bold:true},center,21); r++;
+  mergeText(ws,r,1,6,'SEATING PLAN',sectionFont,center,24); r++;
+  blocks.forEach((b,i)=>{
+    if(i) r++;
+    mergeText(ws,r,1,6,b.classLabel,{name:'Bookman Old Style',size:16,bold:true},center,24); r++;
+    ws.mergeCells(r,1,r,2); ws.getCell(r,1).value='Course Title:'; ws.getCell(r,1).font=labelFont; ws.getCell(r,1).alignment=center;
+    ws.mergeCells(r,3,r,4); ws.getCell(r,3).value=b.courseTitle; ws.getCell(r,3).font=labelFont; ws.getCell(r,3).alignment=leftAlign;
+    ws.getCell(r,5).value='Session:'; ws.getCell(r,5).font=labelFont; ws.getCell(r,5).alignment={horizontal:'right',vertical:'middle'}; ws.getCell(r,6).value=b.sessionText; ws.getCell(r,6).font=labelFont; ws.getCell(r,6).alignment=center; ws.getRow(r).height=24; r++;
+    ws.mergeCells(r,1,r,2); ws.getCell(r,1).value='Subject Teacher:'; ws.getCell(r,1).font=labelFont; ws.getCell(r,1).alignment=center;
+    ws.mergeCells(r,3,r,4); ws.getCell(r,3).value=b.faculty; ws.getCell(r,3).font=labelFont; ws.getCell(r,3).alignment=leftAlign;
+    ws.getCell(r,5).value='Time:'; ws.getCell(r,5).font=labelFont; ws.getCell(r,5).alignment={horizontal:'right',vertical:'middle'}; ws.getCell(r,6).value=b.timeText; ws.getCell(r,6).font=labelFont; ws.getCell(r,6).alignment=center; ws.getRow(r).height=24; r++;
+    ws.getCell(r,5).value='Date:'; ws.getCell(r,5).font=labelFont; ws.getCell(r,5).alignment={horizontal:'right',vertical:'middle'}; ws.getCell(r,6).value=b.dateText; ws.getCell(r,6).font=labelFont; ws.getCell(r,6).alignment=center; ws.getRow(r).height=24; r++;
+    ['S.No.','Reg No.','Name','Seating Plan','Room No.','Remarks'].forEach((v,c)=>{const cell=ws.getCell(r,c+1);cell.value=v;cell.font=headFont;cell.alignment=center;cell.border=border;}); ws.getRow(r).height=24;r++;
+    b.rows.forEach(row=>{[row.sno,row.reg,row.name,row.seat,row.room||'--',combinedRemarks(row.reg,b.courseTitle)].forEach((v,c)=>{const cell=ws.getCell(r,c+1);cell.value=v;cell.font=bodyFont;cell.alignment=c===2?leftAlign:center;cell.border=border;});ws.getRow(r).height=24;r++;});
+  });
+
+  // Sheet 2 — Notice Board, matching the supplied DSU Notice Board layout.
+  const nb=noticeBoardBlocks();
+  const nws=wb.addWorksheet('Notice Board'); setup(nws,[2,11,14,38,17,16,40]);
+  r=1;
+  mergeText(nws,r,2,7,state.uniName||'DHA SUFFA UNIVERSITY',titleFont,center,26); r++;
+  mergeText(nws,r,2,7,reportExamTitle(),examFont,center,20); r++;
+  mergeText(nws,r,2,7,'SEATING PLAN',{name:'Bookman Old Style',size:18,bold:true},center,24); r++;
+  nb.forEach((b,i)=>{
+    if(i) r++;
+    mergeText(nws,r,2,7,b.classLabel,{name:'Bookman Old Style',size:16,bold:true},center,24); r++;
+    nws.mergeCells(r,2,r,3); nws.getCell(r,2).value='Course Title:'; nws.getCell(r,2).font=labelFont; nws.getCell(r,2).alignment=center;
+    nws.mergeCells(r,4,r,5); nws.getCell(r,4).value=b.courseTitle; nws.getCell(r,4).font=labelFont; nws.getCell(r,4).alignment=leftAlign;
+    nws.getCell(r,6).value='Session:'; nws.getCell(r,6).font=labelFont; nws.getCell(r,6).alignment={horizontal:'right',vertical:'middle'}; nws.getCell(r,7).value=b.sessionText; nws.getCell(r,7).font=labelFont; nws.getCell(r,7).alignment=center; nws.getRow(r).height=24; r++;
+    nws.mergeCells(r,2,r,3); nws.getCell(r,2).value='Subject Teacher:'; nws.getCell(r,2).font=labelFont; nws.getCell(r,2).alignment=center;
+    nws.mergeCells(r,4,r,5); nws.getCell(r,4).value=b.faculty; nws.getCell(r,4).font=labelFont; nws.getCell(r,4).alignment=leftAlign;
+    nws.getCell(r,6).value='Time:'; nws.getCell(r,6).font=labelFont; nws.getCell(r,6).alignment={horizontal:'right',vertical:'middle'}; nws.getCell(r,7).value=b.timeText; nws.getCell(r,7).font=labelFont; nws.getCell(r,7).alignment=center; nws.getRow(r).height=24; r++;
+    nws.getCell(r,6).value='Date:'; nws.getCell(r,6).font=labelFont; nws.getCell(r,6).alignment={horizontal:'right',vertical:'middle'}; nws.getCell(r,7).value=b.dateText; nws.getCell(r,7).font=labelFont; nws.getCell(r,7).alignment=center; nws.getRow(r).height=24; r++;
+    ['S.No.','Reg No.','Name','Seating Plan','Room No','Remarks'].forEach((v,c)=>{const cell=nws.getCell(r,c+2);cell.value=v;cell.font=headFont;cell.alignment=center;cell.border=border;}); nws.getRow(r).height=24;r++;
+    b.rows.forEach(row=>{[row.sno,row.reg,row.name,row.seat,b.roomName||row.room||'--',combinedRemarks(row.reg,b.courseTitle)].forEach((v,c)=>{const cell=nws.getCell(r,c+2);cell.value=v;cell.font=bodyFont;cell.alignment=c===2?leftAlign:center;cell.border=border;});nws.getRow(r).height=24;r++;});
+  });
+  nws.pageSetup={paperSize:nws.PAPERSIZE_A4,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0};
+  await wb.xlsx.writeBuffer().then(buf=>{
+    const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='course-wise-seating-plan.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  });
+  toast(`Downloaded Excel with DSU Seating Plan + separate Notice Board tab (${nb.length} room/course block(s))`,'ok');
+}
+
+function pdfCourseWiseSeating(){
+  const blocks = buildSeatingPlanBlocks();
+  if(!blocks.length){ toast('No seating data yet -- run Generate Seating first','warn'); return; }
+
+  const doc = new jsPDF({unit:'pt',format:'a4'});
+  const pw = doc.internal.pageSize.getWidth();
+  const ph = doc.internal.pageSize.getHeight();
+  const margin = 40;
+  const headerTop = 34;
+
+  function drawTopHeader(){
+    doc.setFont('helvetica','bold').setFontSize(13).setTextColor(0,0,0);
+    doc.text(state.uniName || 'DHA SUFFA UNIVERSITY', pw/2, headerTop, {align:'center'});
+    doc.setFontSize(10);
+    doc.text(reportExamTitle(), pw/2, headerTop+15, {align:'center'});
+    doc.text('SEATING PLAN', pw/2, headerTop+29, {align:'center'});
+    doc.setDrawColor(30,64,175).setLineWidth(1);
+    doc.line(margin, headerTop+38, pw-margin, headerTop+38);
+  }
+
+  // Each course/class block starts on a NEW PDF PAGE.
+  blocks.forEach((b, blockIndex)=>{
+    if(blockIndex>0) doc.addPage();
+
+    drawTopHeader();
+    let y = headerTop + 52;
+
+    doc.setFont('helvetica','bold').setFontSize(11).setTextColor(30,64,175);
+    doc.text(b.classLabel, margin, y); y += 14;
+    doc.setFont('helvetica','normal').setFontSize(9).setTextColor(0,0,0);
+    doc.text(`Course Title: ${b.courseTitle}`, margin, y);
+    doc.text(`Session: ${b.sessionText}`, pw/2+10, y); y += 12;
+    doc.text(`Subject Teacher: ${b.faculty}`, margin, y);
+    doc.text(`Time: ${b.timeText}`, pw/2+10, y); y += 12;
+    doc.text(`Date: ${b.dateText}`, pw/2+10, y); y += 4;
+
+    // IMPORTANT: Room No. is populated on EVERY student row.
+    const body = b.rows.map(row=>[
+      row.sno,
+      row.reg,
+      row.name,
+      row.seat,
+      row.room || '--',
+      combinedRemarks(row.reg, b.courseTitle)
+    ]);
+
+    doc.autoTable({
+      head:[['S.No.','Reg No.','Name','Seating Plan','Room No.','Remarks']],
+      body,
+      startY:y+4,
+      styles:{fontSize:8, cellPadding:3},
+      headStyles:{fillColor:[30,64,175], textColor:255},
+      margin:{left:margin, right:margin, top:headerTop+52, bottom:30},
+      // If one course has more students than fit on one page, its table may
+      // continue to additional pages. The NEXT course still always begins
+      // on a fresh page, so courses are never mixed on a page.
+      showHead:'everyPage',
+      didDrawPage:()=>{
+        drawTopHeader();
+      }
+    });
+  });
+
+  doc.save('course-wise-seating-plan.pdf');
+  toast(`Downloaded PDF -- ${blocks.length} course report page(s)/section(s); room shown on every row`,'ok');
+}
+
+
+/* ================= DSU NOTICE BOARD — STANDALONE REPORTS ================= */
+function pdfNoticeBoard(){
+  const blocks=noticeBoardBlocks();
+  if(!blocks.length){toast('No seating data yet -- run Generate Seating first','warn');return;}
+  const doc=new jsPDF({unit:'pt',format:'a4',orientation:'portrait'});
+  const pw=doc.internal.pageSize.getWidth();
+  const ph=doc.internal.pageSize.getHeight();
+  const margin=34;
+  const contentW=pw-margin*2;
+  const black=[0,0,0];
+  function setFont(size,bold=false){doc.setFont('times',bold?'bold':'normal');doc.setFontSize(size);doc.setTextColor(...black);}
+  function center(text,y,size=14,bold=false){setFont(size,bold);doc.text(String(text??''),pw/2,y,{align:'center'});}
+
+  blocks.forEach((b,bi)=>{
+    if(bi) doc.addPage();
+    let y=30;
+    center(state.uniName||'DHA SUFFA UNIVERSITY',y+12,18,true); y+=34;
+    center(reportExamTitle(),y,14,true); y+=24;
+    center('SEATING PLAN',y,16,true); y+=22;
+    center(b.classLabel||'',y,15,true); y+=18;
+
+    // DSU Notice Board metadata: use a real two-column table so long values never overlap.
+    const meta=[
+      [`Course Title: ${b.courseTitle||''}`,`Session: ${b.sessionText||''}`],
+      [`Subject Teacher: ${b.faculty||''}`,`Time: ${b.timeText||''}`],
+      ['',`Date: ${b.dateText||''}`]
+    ];
+    doc.autoTable({
+      body:meta,startY:y,margin:{left:margin,right:margin},theme:'plain',
+      styles:{font:'times',fontSize:10.5,fontStyle:'bold',textColor:black,cellPadding:{top:2,right:4,bottom:3,left:4},valign:'middle',overflow:'linebreak'},
+      columnStyles:{0:{cellWidth:contentW*.58,halign:'left'},1:{cellWidth:contentW*.42,halign:'left'}},
+      didParseCell:d=>{d.cell.styles.minCellHeight=18;}
+    });
+    y=doc.lastAutoTable.finalY+8;
+
+    const body=b.rows.map(r=>{ const rmk=combinedRemarks(r.reg,b.courseTitle); return [r.sno,r.reg,r.name,r.seat,b.roomName||r.room||'--',rmk]; });
+    doc.autoTable({
+      head:[['S.No.','Reg No.','Name','Seating Plan','Room No','Remarks']],
+      body,startY:y,margin:{left:margin,right:margin,bottom:30},theme:'grid',
+      styles:{font:'times',fontSize:9.2,cellPadding:{top:3,right:3,bottom:3,left:3},textColor:black,lineColor:black,lineWidth:.5,halign:'center',valign:'middle',overflow:'linebreak',minCellHeight:18},
+      headStyles:{font:'times',fontStyle:'bold',fontSize:10,fillColor:[255,255,255],textColor:black,lineColor:black,lineWidth:.7,halign:'center',valign:'middle'},
+      columnStyles:{0:{cellWidth:35},1:{cellWidth:65},2:{cellWidth:126,halign:'left'},3:{cellWidth:84},4:{cellWidth:58},5:{cellWidth:151,halign:'left'}},
+      rowPageBreak:'avoid',showHead:'everyPage'
+    });
+  });
+  doc.save('notice-board-DSU.pdf');
+  toast(`Downloaded standalone DSU Notice Board PDF — ${blocks.length} report page(s)`,'ok');
+}
+
+async function xlsxNoticeBoard(){
+  const blocks=noticeBoardBlocks();
+  if(!blocks.length){toast('No seating data yet -- run Generate Seating first','warn');return;}
+  if(typeof ExcelJS==='undefined'){toast('Excel export library is not available. Please reload the app.','err');return;}
+  const wb=new ExcelJS.Workbook();
+  wb.creator='DHA Suffa University'; wb.subject='DSU Notice Board'; wb.title='DSU Notice Board';
+  const thin={style:'thin',color:{argb:'FF000000'}};
+  const border={top:thin,left:thin,bottom:thin,right:thin};
+  const titleFont={name:'Times New Roman',size:18,bold:true};
+  const examFont={name:'Times New Roman',size:14,bold:true};
+  const sectionFont={name:'Times New Roman',size:16,bold:true};
+  const labelFont={name:'Times New Roman',size:11,bold:true};
+  const bodyFont={name:'Times New Roman',size:11};
+  const headFont={name:'Times New Roman',size:11,bold:true};
+  const center={horizontal:'center',vertical:'middle',wrapText:true};
+  const left={horizontal:'left',vertical:'middle',wrapText:true};
+  const ws=wb.addWorksheet('Notice Board');
+  [2,11,14,38,17,16,40].forEach((w,i)=>ws.getColumn(i+1).width=w);
+  ws.pageSetup={paperSize:ws.PAPERSIZE_A4,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0};
+  ws.pageMargins={left:.25,right:.25,top:.25,bottom:.25,header:0,footer:0};
+  ws.views=[{showGridLines:false}];
+  function merge(row,a,b,value,font=bodyFont,alignment=center,height=24){ws.mergeCells(row,a,row,b);const c=ws.getCell(row,a);c.value=value;c.font=font;c.alignment=alignment;ws.getRow(row).height=height;}
+  let r=1;
+  merge(r,2,7,state.uniName||'DHA SUFFA UNIVERSITY',titleFont,center,27);r++;
+  merge(r,2,7,reportExamTitle(),examFont,center,22);r++;
+  merge(r,2,7,excelDepartmentHeaderLabel(),{name:'Times New Roman',size:13,bold:true},center,20);r++;
+  merge(r,2,7,'SEATING PLAN',sectionFont,center,25);r++;
+  blocks.forEach((b,bi)=>{
+    if(bi) r++;
+    merge(r,2,7,b.classLabel||'',sectionFont,center,25);r++;
+    ws.mergeCells(r,2,r,3);ws.getCell(r,2).value='Course Title:';ws.getCell(r,2).font=labelFont;ws.getCell(r,2).alignment=left;
+    ws.mergeCells(r,4,r,5);ws.getCell(r,4).value=b.courseTitle||'';ws.getCell(r,4).font=labelFont;ws.getCell(r,4).alignment=left;
+    ws.getCell(r,6).value='Session:';ws.getCell(r,6).font=labelFont;ws.getCell(r,6).alignment=left;ws.getCell(r,7).value=b.sessionText||'';ws.getCell(r,7).font=labelFont;ws.getCell(r,7).alignment=left;ws.getRow(r).height=30;r++;
+    ws.mergeCells(r,2,r,3);ws.getCell(r,2).value='Subject Teacher:';ws.getCell(r,2).font=labelFont;ws.getCell(r,2).alignment=left;
+    ws.mergeCells(r,4,r,5);ws.getCell(r,4).value=b.faculty||'';ws.getCell(r,4).font=labelFont;ws.getCell(r,4).alignment=left;
+    ws.getCell(r,6).value='Time:';ws.getCell(r,6).font=labelFont;ws.getCell(r,6).alignment=left;ws.getCell(r,7).value=b.timeText||'';ws.getCell(r,7).font=labelFont;ws.getCell(r,7).alignment=left;ws.getRow(r).height=30;r++;
+    ws.getCell(r,6).value='Date:';ws.getCell(r,6).font=labelFont;ws.getCell(r,6).alignment=left;ws.getCell(r,7).value=b.dateText||'';ws.getCell(r,7).font=labelFont;ws.getCell(r,7).alignment=left;ws.getRow(r).height=24;r++;
+    ['S.No.','Reg No.','Name','Seating Plan','Room No','Remarks'].forEach((v,c)=>{const cell=ws.getCell(r,c+2);cell.value=v;cell.font=headFont;cell.alignment=center;cell.border=border;});ws.getRow(r).height=25;r++;
+    b.rows.forEach(row=>{const rmk=combinedRemarks(row.reg,b.courseTitle); [row.sno,row.reg,row.name,row.seat,b.roomName||row.room||'--',rmk].forEach((v,c)=>{const cell=ws.getCell(r,c+2);cell.value=v;cell.font=bodyFont;cell.alignment=c===2?left:center;cell.border=border;if(c===5&&rmk)cell.font={name:'Times New Roman',size:10,bold:true,color:{argb:'FFB91C1C'}};});ws.getRow(r).height=24;r++;});
+  });
+  ws.printArea=`B1:G${r-1}`;
+  const buf=await wb.xlsx.writeBuffer();
+  const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='notice-board-DSU.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  toast(`Downloaded standalone DSU Notice Board Excel — ${blocks.length} report block(s)`,'ok');
+}
+
+/* ================= DSU COURSE / FACULTY SUMMARY REPORTS =================
+   Reference format: Summary MS, HU & PSY.xlsx
+   - D:W style report grid
+   - one row per course/class/faculty assignment
+   - room columns remain separate
+   - faculty report NEVER combines different courses into one row
+*/
+function reportPeriodDate(){
+  // The PDF/report period follows the date selected in the report controls first,
+  // then the configured exam start date, and finally today's date if no exam date
+  // has been configured yet.
+  return state.reportCalendarDate || state.examStartDate || new Date().toISOString().slice(0,10);
+}
+function semesterFromDate(dateValue){
+  if(!dateValue) return '';
+  const m=new Date(dateValue+'T00:00:00').getMonth()+1;
+  if(m>=8 && m<=12) return 'Fall';
+  if(m>=1 && m<=5) return 'Spring';
+  return 'Summer';
+}
+function yearFromDate(dateValue){
+  if(!dateValue) return '';
+  const m=String(dateValue).match(/(19|20)\d{2}/);
+  return m ? m[0] : '';
+}
+function reportExamTitle(){
+  const sem=state.reportSemester || semesterFromDate(reportPeriodDate()) || 'Fall';
+  const year=state.reportYear || yearFromDate(reportPeriodDate()) || String(new Date().getFullYear());
+  return `END SEMESTER EXAMINATIONS - ${String(sem).toUpperCase()} SEMESTER ${year}`;
+}
+function syncReportExamTitle(){
+  state.examTitle=reportExamTitle();
+  const el=document.getElementById('examTitle');
+  if(el) el.value=state.examTitle;
+}
+function inferSummarySemester(){
+  return semesterFromDate(reportPeriodDate()) || 'Fall';
+}
+function inferSummaryYear(){
+  return yearFromDate(reportPeriodDate()) || String(new Date().getFullYear());
+}
+function summaryDepartmentOptions(){
+  const set=new Set();
+  if(state.departmentName) set.add(String(state.departmentName).trim());
+  (state.timetableProgramGroups||[]).forEach(g=>{ if(g.department) set.add(String(g.department).trim()); });
+  (state.courses||[]).forEach(c=>{ if(c.program) set.add(String(c.program).trim()); });
+  return [...set].filter(Boolean).sort();
+}
+function initSummaryReportControls(){
+  const sem=document.getElementById('summarySemester');
+  const yr=document.getElementById('summaryYear');
+  const dept=document.getElementById('summaryDepartment');
+  const cal=document.getElementById('summaryCalendarDate');
+  const from=document.getElementById('summaryDataFrom');
+  const to=document.getElementById('summaryDataTo');
+  if(!sem) return;
+  if(!state.reportSemester) state.reportSemester=inferSummarySemester();
+  sem.value=state.reportSemester;
+  if(!state.reportYear) state.reportYear=inferSummaryYear();
+  if(yr) yr.value=state.reportYear;
+  syncReportExamTitle();
+  if(dept){
+    const current=String(state.departmentName||'').trim();
+    const opts=summaryDepartmentOptions();
+    if(current && !opts.includes(current)) opts.unshift(current);
+    dept.innerHTML = opts.length ? opts.map(o=>`<option value="${esc(o)}"${o===current?' selected':''}>${esc(o)}</option>`).join('') : '<option value="">No departments yet -- set one under Exam Sessions</option>';
+  }
+  if(cal) cal.value=state.reportCalendarDate||'';
+  if(from) from.value=state.reportDataFrom||state.examStartDate||'';
+  if(to) to.value=state.reportDataTo||state.examEndDate||'';
+}
+function setSummaryReportControl(key,value){
+  if(key==='semester') state.reportSemester=value;
+  if(key==='year') state.reportYear=value;
+  if(key==='department'){
+    state.departmentName=value;
+    const dn=document.getElementById('departmentName'); if(dn) dn.value=value;
+    const tdn=document.getElementById('timetableDepartmentName'); if(tdn) tdn.value=value;
+  }
+  if(key==='calendarDate') { state.reportCalendarDate=value; if(value){ state.reportSemester=semesterFromDate(value); state.reportYear=yearFromDate(value); } }
+  if(key==='dataFrom') state.reportDataFrom=value;
+  if(key==='dataTo') state.reportDataTo=value;
+  if(key==='dataFrom' && state.reportDataTo && value && value>state.reportDataTo) state.reportDataTo=value;
+  if(key==='dataTo' && state.reportDataFrom && value && value<state.reportDataFrom) state.reportDataFrom=value;
+  save();
+}
+function clearSummaryReportDates(){
+  state.reportCalendarDate=''; state.reportDataFrom=''; state.reportDataTo=''; save(); initSummaryReportControls();
+}
+function summarySelectedDates(){
+  const exact=state.reportCalendarDate||'';
+  const from=state.reportDataFrom||'';
+  const to=state.reportDataTo||'';
+  return {exact,from,to};
+}
+function summaryDateAllowed(date){
+  const d=String(date||''); const f=summarySelectedDates();
+  if(f.exact) return d===f.exact;
+  if(f.from && d<f.from) return false;
+  if(f.to && d>f.to) return false;
+  return true;
+}
+function summaryReportRows(kind){
+  const blocks=buildSeatingPlanBlocks();
+  const rows=[];
+  blocks.filter(b=>summaryDateAllowed(b.dateText)).forEach(b=>{
+    // A course may be seated across several rooms.  The seating/attendance
+    // data keeps the room on each student row, so the summary must preserve
+    // that room-level distribution instead of using only b.roomName (the first
+    // room returned by buildSeatingPlanBlocks()).
+    const byRoom=new Map();
+    b.rows.forEach(st=>{
+      const room=st.room||b.roomName||'--';
+      if(!byRoom.has(room)) byRoom.set(room,[]);
+      byRoom.get(room).push(st);
+    });
+    if(!byRoom.size) byRoom.set(b.roomName||'--',[]);
+    byRoom.forEach((students,room)=>{
+      rows.push({
+        date:b.dateText||'--', course:b.courseTitle||'--', classes:b.classLabel||'--',
+        faculty:b.faculty||'--', room, session:b.sessionText||'--',
+        time:b.timeText||'--', students:students.length,
+        key:[b.dateText,b.courseTitle,b.classLabel,b.faculty,room].join('|')
+      });
+    });
+  });
+  rows.sort((a,b)=> kind==='faculty'
+    ? a.faculty.localeCompare(b.faculty)||a.date.localeCompare(b.date)||a.course.localeCompare(b.course)||a.classes.localeCompare(b.classes)||a.room.localeCompare(b.room)
+    : a.date.localeCompare(b.date)||a.course.localeCompare(b.course)||a.classes.localeCompare(b.classes)||a.faculty.localeCompare(b.faculty)||a.room.localeCompare(b.room));
+  let sno=0;
+  return rows.map(x=>({...x,sno:++sno}));
+}
+function summaryRoomsForDate(rows){
+  const names=[...new Set(rows.map(x=>x.room).filter(Boolean))];
+  const roomObjs=names.map(n=>state.rooms.find(r=>r.name===n)).filter(Boolean);
+  return roomObjs.sort((a,b)=>a.name.localeCompare(b.name));
+}
+function summaryDateGroups(kind){
+  const rows=summaryReportRows(kind), map=new Map();
+  rows.forEach(x=>{if(!map.has(x.date))map.set(x.date,[]);map.get(x.date).push(x);});
+  return [...map.entries()].map(([date,rs])=>({date,rows:rs,rooms:summaryRoomsForDate(rs)}));
+}
+function summarySemesterLabel(){ const y=state.reportYear||inferSummaryYear(); return `${state.reportSemester||inferSummarySemester()} SEMESTER${y?' '+y:''}`; }
+function summaryDateLabel(){
+  const f=summarySelectedDates();
+  if(f.exact) return f.exact;
+  if(f.from || f.to) return `${f.from||'All'} to ${f.to||'All'}`;
+  return state.examStartDate&&state.examEndDate ? `${state.examStartDate} to ${state.examEndDate}` : 'All Exam Dates';
+}
+function timetableDepartmentHeaderLabel(){
+  const mode=document.getElementById('timetableReportMode')?.value || state.timetableReportMode || 'separate';
+  if(mode==='merge') return String(state.departmentName||'Department').trim() || 'Department';
+  if(mode==='groups'){
+    const names=[...(state.timetableProgramGroups||[])].map(g=>String(g.department||g.name||'').trim()).filter(Boolean);
+    return [...new Set(names)].join(' / ') || String(state.departmentName||'Department').trim() || 'Department';
+  }
+  const selected=selectedTimetablePrograms();
+  if(selected.length===1) return String(state.departmentName||selected[0]||'Department').trim() || 'Department';
+  return String(state.departmentName||'Department').trim() || 'Department';
+}
+function excelDepartmentHeaderLabel(){
+  // Excel reports use exactly the same department source as the Program-wise
+  // Timetable. This keeps PDF, Excel and on-screen department headings aligned.
+  return timetableDepartmentHeaderLabel();
+}
+function summaryHeaderRows(doc,title,date,rooms,departmentLabel){
+  const pw=doc.internal.pageSize.getWidth();
+  let y=28;
+  doc.setFont('times','bold');doc.setFontSize(22);doc.text(state.uniName||'DHA SUFFA UNIVERSITY',pw/2,y,{align:'center'});y+=21;
+  doc.setFontSize(20);doc.text(reportExamTitle(),pw/2,y,{align:'center'});y+=20;
+  doc.setFontSize(20);doc.text(departmentLabel||timetableDepartmentHeaderLabel(),pw/2,y,{align:'center'});y+=18;
+  doc.setFontSize(22);doc.text(summarySemesterLabel(),pw/2,y,{align:'center'});y+=18;
+  doc.setFontSize(14);doc.text(`Calendar / Report Date: ${state.reportCalendarDate||'All Selected Dates'}`,pw/2,y,{align:'center'});y+=15;
+  doc.setFontSize(14);doc.text(`Data Date Range: ${summaryDateLabel()}`,pw/2,y,{align:'center'});y+=17;
+  doc.setFontSize(20);doc.text(date,pw/2,y,{align:'center'});y+=16;
+  return y;
+}
+function summaryPdfSection(doc,title,date,rows,rooms,isFirst,departmentLabel){
+  if(!isFirst) doc.addPage();
+  let y=summaryHeaderRows(doc,title,date,rooms,departmentLabel);
+  const roomNames=rooms.map(r=>r.name);
+  const head=['S.No','Subject','Class','Name of Faculty',...roomNames,'TOTAL'];
+  const map=new Map();
+  rows.forEach(x=>{
+    const k=[x.course,x.classes,x.faculty].join('|');
+    if(!map.has(k)) map.set(k,{course:x.course,classes:x.classes,faculty:x.faculty,rooms:{},students:0});
+    const q=map.get(k);q.rooms[x.room]=(q.rooms[x.room]||0)+x.students;q.students+=x.students;
+  });
+  const finalRows=[...map.values()].map((x,i)=>[i+1,x.course,x.classes,x.faculty,...roomNames.map(n=>x.rooms[n]||''),x.students]);
+  const widths=[28,125,82,125,...roomNames.map(()=>45),45];
+  doc.autoTable({head:[head],body:finalRows,startY:y,margin:{left:18,right:18,bottom:24},theme:'grid',styles:{font:'times',fontSize:8.5,textColor:[0,0,0],lineColor:[0,0,0],lineWidth:.5,cellPadding:2.5,valign:'middle',overflow:'linebreak'},headStyles:{font:'times',fontStyle:'bold',fontSize:10,fillColor:[0,0,0],textColor:[255,255,255],lineColor:[0,0,0],lineWidth:.7,halign:'center'},columnStyles:Object.fromEntries(widths.map((w,i)=>[i,{cellWidth:w,halign:(i===0||i>=4)?'center':'left'}]))});
+  const totals=roomNames.map(n=>finalRows.reduce((a,r)=>a+(Number(r[4+roomNames.indexOf(n)])||0),0));
+  const total=finalRows.reduce((a,r)=>a+(Number(r[r.length-1])||0),0);
+  let yy=doc.lastAutoTable.finalY+8;doc.setFont('times','bold');doc.setFontSize(9);doc.text('ROOM TOTALS:',18,yy);yy+=12;
+  doc.setFont('times','normal');doc.text(roomNames.map((n,i)=>`${n}: ${totals[i]}`).join('   ')+`   TOTAL: ${total}`,18,yy);
+}
+function pdfSummary(kind){
+  initSummaryReportControls();
+  const groups=summaryDateGroups(kind);
+  if(!groups.length){toast('No seating data matches the selected semester/date controls.','warn');return;}
+  const doc=new jsPDF({unit:'pt',format:'a4',orientation:'landscape'});
+  groups.forEach((g,i)=>{
+    if(kind==='faculty') summaryPdfFacultySection(doc,g,i===0,timetableDepartmentHeaderLabel());
+    else summaryPdfSection(doc,'END SEMESTER EXAMINATIONS SEATING SUMMARY',g.date,g.rows,g.rooms,i===0,timetableDepartmentHeaderLabel());
+  });
+  doc.save(kind==='faculty'?'faculty-wise-summary-DSU.pdf':'course-wise-summary-DSU.pdf');
+  toast(`Downloaded ${kind==='faculty'?'Faculty-wise':'Course-wise'} Summary PDF — ${summaryReportRows(kind).length} course/room record(s)`,'ok');
+}
+function summaryFacultyCourseRows(rows,roomNames){
+  const map=new Map();
+  rows.forEach(x=>{
+    const k=[x.course,x.classes,x.faculty].join('|');
+    if(!map.has(k)) map.set(k,{course:x.course,classes:x.classes,faculty:x.faculty,rooms:{},students:0});
+    const q=map.get(k); q.rooms[x.room]=(q.rooms[x.room]||0)+x.students; q.students+=x.students;
+  });
+  return [...map.values()].map(x=>({
+    faculty:x.faculty,course:x.course,classes:x.classes,rooms:x.rooms,students:x.students,
+    values:[x.course,x.classes,...roomNames.map(n=>x.rooms[n]||''),x.students]
+  }));
+}
+function summaryPdfFacultySection(doc,g,isFirst,departmentLabel){
+  if(!isFirst) doc.addPage();
+  let y=summaryHeaderRows(doc,'END SEMESTER EXAMINATIONS SEATING SUMMARY',g.date,g.rooms,departmentLabel);
+  const roomNames=g.rooms.map(r=>r.name);
+  const data=summaryFacultyCourseRows(g.rows,roomNames);
+  const head=['S.No','Subject','Class','Name of Faculty',...roomNames,'TOTAL'];
+  let facultyNo=0;
+  const body=data.map((x,i)=>{
+    const first=i===0||data[i-1].faculty!==x.faculty;
+    if(first) facultyNo++;
+    return [first?facultyNo:'',x.course||'--',x.classes||'--',first?(x.faculty||'--'):'',...roomNames.map(n=>x.rooms[n]||''),x.students||0];
+  });
+  const widths=[28,125,82,125,...roomNames.map(()=>45),45];
+  doc.autoTable({head:[head],body,startY:y,margin:{left:18,right:18,bottom:24},theme:'grid',styles:{font:'times',fontSize:8.5,textColor:[0,0,0],lineColor:[0,0,0],lineWidth:.5,cellPadding:2.5,valign:'middle',overflow:'linebreak'},headStyles:{font:'times',fontStyle:'bold',fontSize:10,fillColor:[0,0,0],textColor:[255,255,255],lineColor:[0,0,0],lineWidth:.7,halign:'center'},columnStyles:Object.fromEntries(widths.map((w,i)=>[i,{cellWidth:w,halign:(i===0||i>=4)?'center':'left'}]))});
+  const table=doc.lastAutoTable;
+  // Visually merge S.No. and faculty cells, matching the Excel grouping.
+  let i=0;
+  while(i<data.length){
+    let j=i+1;while(j<data.length&&data[j].faculty===data[i].faculty)j++;
+    if(j-i>1){
+      const firstS=table.body[i]?.cells[0],lastS=table.body[j-1]?.cells[0],firstF=table.body[i]?.cells[3],lastF=table.body[j-1]?.cells[3];
+      if(firstS&&lastS){doc.setFillColor(255,255,255);doc.rect(firstS.x,firstS.y,firstS.width,lastS.y+lastS.height-firstS.y,'F');doc.setDrawColor(0,0,0);doc.setLineWidth(.5);doc.rect(firstS.x,firstS.y,firstS.width,lastS.y+lastS.height-firstS.y,'S');doc.setFont('times','bold');doc.setFontSize(8.5);doc.text(String(body[i][0]),firstS.x+firstS.width/2,firstS.y+(lastS.y+lastS.height-firstS.y)/2+3,{align:'center'});}
+      if(firstF&&lastF){doc.setFillColor(255,255,255);doc.rect(firstF.x,firstF.y,firstF.width,lastF.y+lastF.height-firstF.y,'F');doc.setDrawColor(0,0,0);doc.setLineWidth(.5);doc.rect(firstF.x,firstF.y,firstF.width,lastF.y+lastF.height-firstF.y,'S');doc.setFont('times','bold');doc.setFontSize(8.5);const lines=doc.splitTextToSize(String(data[i].faculty||''),Math.max(10,firstF.width-8));const h=lastF.y+lastF.height-firstF.y;const lh=9.5;doc.text(lines,firstF.x+firstF.width/2,firstF.y+(h-lines.length*lh)/2+lh*.8,{align:'center'});}
+    }
+    i=j;
+  }
+  const totals=roomNames.map(n=>data.reduce((a,x)=>a+(Number(x.rooms[n])||0),0));
+  const total=data.reduce((a,x)=>a+(Number(x.students)||0),0);
+  let yy=table.finalY+8;doc.setFont('times','bold');doc.setFontSize(9);doc.setTextColor(0,0,0);doc.text('ROOM TOTALS:',18,yy);yy+=12;doc.setFont('times','normal');doc.text(roomNames.map((n,i)=>`${n}: ${totals[i]}`).join('   ')+`   TOTAL: ${total}`,18,yy);
+}
+function pdfCourseSummary(){return pdfSummary('course');}
+function pdfFacultySummary(){return pdfSummary('faculty');}
+async function xlsxSummary(kind){
+  initSummaryReportControls();
+  const groups=summaryDateGroups(kind);if(!groups.length){toast('No seating data matches the selected semester/date controls.','warn');return;}
+  if(typeof ExcelJS==='undefined'){toast('Excel export library is not available. Please reload the app.','err');return;}
+  const wb=new ExcelJS.Workbook();wb.creator='DHA Suffa University';wb.title=kind==='course'?'DSU Course-wise Summary':'DSU Faculty-wise Summary';
+  const ws=wb.addWorksheet(kind==='course'?'Course Summary':'Faculty Summary');ws.views=[{showGridLines:false}];
+  const thin={style:'thin',color:{argb:'FF000000'}},border={top:thin,left:thin,bottom:thin,right:thin};
+  const tf={name:'Times New Roman',size:22,bold:true},ef={name:'Times New Roman',size:20,bold:true},mf={name:'Times New Roman',size:20,bold:true},hf={name:'Times New Roman',size:16,bold:true,color:{argb:'FFFFFFFF'}},bf={name:'Arial',size:16};
+  const center={horizontal:'center',vertical:'middle',wrapText:true},left={horizontal:'left',vertical:'middle',wrapText:true};
+  let r=1;
+  const merge=(row,a,b,v,font,align=center,h=24)=>{ws.mergeCells(row,a,row,b);const c=ws.getCell(row,a);c.value=v;c.font=font;c.alignment=align;ws.getRow(row).height=h;};
+  groups.forEach((g,gi)=>{
+    const roomNames=g.rooms.map(x=>x.name);const cols=4+roomNames.length+1;
+    if(gi){r+=2;}
+    merge(r,4,cols,state.uniName||'DHA SUFFA UNIVERSITY',tf,center,31.5);r++;
+    merge(r,4,cols,reportExamTitle(),ef,center,25.5);r++;
+    merge(r,4,cols,excelDepartmentHeaderLabel(),mf,center,25.5);r++;
+    merge(r,4,cols,summarySemesterLabel(),mf,center,25.5);r++;
+    merge(r,4,cols,`Calendar / Report Date: ${state.reportCalendarDate||'All Selected Dates'}`,{name:'Times New Roman',size:14,bold:true},center,21);r++;
+    merge(r,4,cols,`Data Date Range: ${summaryDateLabel()}`,{name:'Times New Roman',size:14,bold:true},center,21);r++;
+    merge(r,4,cols,g.date,mf,center,22.9);r++;
+    ws.getCell(r,4).value='';ws.getCell(r,4).border=border;
+    roomNames.forEach((n,i)=>{const c=ws.getCell(r,5+i);c.value=g.rooms[i].capacity||'';c.font=bf;c.alignment=center;c.border=border;});
+    ws.getCell(r,5+roomNames.length).value='';ws.getCell(r,5+roomNames.length).border=border;ws.getRow(r).height=22;r++;
+
+    // Faculty Summary uses the grouping from Faculty_Courses_Merged.xlsx,
+    // while ALL other visual formatting remains identical to Course Summary.
+    const head=['S.No','Subject','Class','Name of Faculty',...roomNames,'TOTAL'];
+    head.forEach((v,i)=>{const c=ws.getCell(r,4+i);c.value=v;c.font=hf;c.alignment=center;c.border=border;c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF000000'}};});ws.getRow(r).height=35;r++;
+    const data=summaryFacultyCourseRows(g.rows,roomNames);
+    const startDataRow=r;
+
+    if(kind==='faculty'){
+      // One S.No. and one faculty name per faculty group, vertically merged.
+      let groupNo=0;
+      data.forEach((x,i)=>{
+        const first=i===0 || data[i-1].faculty!==x.faculty;
+        if(first) groupNo++;
+        const vals=[first?groupNo:'',x.course,x.classes,first?x.faculty:'',...roomNames.map(n=>x.rooms[n]||''),x.students];
+        vals.forEach((v,j)=>{const c=ws.getCell(r,4+j);c.value=v;c.font=bf;c.alignment=(j===0||j>=4)?center:left;c.border=border;});
+        ws.getRow(r).height=69.95;r++;
+      });
+      let i=0;
+      while(i<data.length){
+        let j=i+1;while(j<data.length&&data[j].faculty===data[i].faculty)j++;
+        if(j-i>1){
+          ws.mergeCells(startDataRow+i,4,startDataRow+j-1,4);
+          ws.mergeCells(startDataRow+i,7,startDataRow+j-1,7);
+        }
+        const groupNo=1+data.slice(1,i+1).reduce((n,x,k)=>n+(x.faculty!==data[k].faculty?1:0),0);
+        const sno=ws.getCell(startDataRow+i,4);sno.value=groupNo;sno.font={...bf,bold:true};sno.alignment=center;
+        const fac=ws.getCell(startDataRow+i,7);fac.value=data[i].faculty;fac.font={...bf,bold:true};fac.alignment=center;
+        for(let rr=startDataRow+i;rr<=startDataRow+j-1;rr++){ws.getCell(rr,4).border=border;ws.getCell(rr,7).border=border;}
+        i=j;
+      }
+    }else{
+      // Course Summary is left unchanged: one sequential S.No. per course.
+      data.forEach((x,i)=>{
+        const vals=[i+1,x.course,x.classes,x.faculty,...roomNames.map(n=>x.rooms[n]||''),x.students];
+        vals.forEach((v,j)=>{const c=ws.getCell(r,4+j);c.value=v;c.font=bf;c.alignment=(j===0||j>=4)?center:left;c.border=border;});
+        ws.getRow(r).height=69.95;r++;
+      });
+    }
+
+    const totalRow=r;ws.mergeCells(totalRow,4,totalRow,7);ws.getCell(totalRow,4).value='TOTAL';ws.getCell(totalRow,4).font=hf;ws.getCell(totalRow,4).alignment=center;ws.getCell(totalRow,4).border=border;
+    roomNames.forEach((n,i)=>{const c=ws.getCell(totalRow,5+i);c.value=data.reduce((a,x)=>a+(x.rooms[n]||0),0);c.font=hf;c.alignment=center;c.border=border;});
+    const tc=ws.getCell(totalRow,5+roomNames.length);tc.value=data.reduce((a,x)=>a+x.students,0);tc.font=hf;tc.alignment=center;tc.border=border;r++;
+    roomNames.forEach((n,i)=>{const c=ws.getCell(r,5+i);c.value=data.reduce((a,x)=>a+(x.rooms[n]?1:0),0);c.font=bf;c.alignment=center;c.border=border;});ws.getRow(r).height=20;r++;
+  });
+  // Exact Course Summary column widths are retained for both reports.
+  ws.getColumn(1).width=2;ws.getColumn(2).width=2;ws.getColumn(3).width=6;ws.getColumn(4).width=11;
+  ws.getColumn(5).width=52.71;ws.getColumn(6).width=21.71;ws.getColumn(7).width=42.71;
+  for(let c=8;c<ws.columnCount;c++)ws.getColumn(c).width=11.7;
+  if(ws.columnCount>=8)ws.getColumn(ws.columnCount).width=12.71;
+  ws.pageSetup={paperSize:ws.PAPERSIZE_A4,orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0};ws.pageMargins={left:.25,right:.25,top:.25,bottom:.25,header:0,footer:0};ws.printArea=`D1:${ws.getColumn(ws.columnCount).letter}${r-1}`;
+  const buf=await wb.xlsx.writeBuffer();const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));a.download=kind==='faculty'?'faculty-wise-summary-DSU.xlsx':'course-wise-summary-DSU.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  toast(`Downloaded ${kind==='faculty'?'Faculty-wise':'Course-wise'} Summary Excel — ${data.length} separate course record(s)`,'ok');
+}
+function xlsxCourseSummary(){return xlsxSummary('course');}
+function xlsxFacultySummary(){return xlsxSummary('faculty');}
+
+/* ================= DEPARTMENT-WISE SUMMARY =================
+   The Program-wise Timetable is the single source of truth for department
+   merging.  Merge mode = one department made from the ticked programs;
+   custom-group mode = the configured timetable groups; separate mode = one
+   department report per selected program.  The same mapping is used by the
+   on-screen report and both exports. */
+function departmentSummaryGroups(){
+  const mode=document.getElementById('timetableReportMode')?.value || state.timetableReportMode || 'separate';
+  state.timetableReportMode=mode;
+  const selected=selectedTimetablePrograms();
+  const tags=taggedCourseSet();
+  const makeRows=(programs)=>{
+    const allowed=new Set(programs||[]), rows=[];
+    const courseById=new Map((state.courses||[]).map(c=>[c.id,c]));
+    const sessionById=new Map((state.sessions||[]).map(x=>[x.id,x]));
+    const studentById=new Map((state.students||[]).map(x=>[x.id,x]));
+    const grouped=new Map();
+    (state.seating||[]).forEach(seat=>{
+      const c=courseById.get(seat.courseId), sess=sessionById.get(seat.sessionId);
+      if(!c||!sess||!allowed.has(c.program)||!tags.has(c.id)||!summaryDateAllowed(sess.date)) return;
+      const key=[sess.id,c.id].join('|');
+      if(!grouped.has(key)) grouped.set(key,{c,sess,seats:[]});
+      grouped.get(key).seats.push(seat);
+    });
+    grouped.forEach(({c,sess,seats})=>{
+      const byRoom=new Map();
+      seats.forEach(st=>{const room=state.rooms.find(r=>r.id===st.roomId)?.name || st.room || '--';if(!byRoom.has(room))byRoom.set(room,[]);byRoom.get(room).push(st);});
+      byRoom.forEach((students,room)=>rows.push({
+        date:sess.date||'--',course:c.title||c.code||'--',classes:c.section||c.className||c.program||'--',
+        faculty:c.faculty||'--',room,session:sess.label||'--',time:`${sess.startTime||''} - ${sess.endTime||''}`.trim(),
+        students:students.length,key:[sess.date,c.id,c.section||c.className||'',room].join('|')
+      }));
+    });
+    rows.sort((a,b)=>a.date.localeCompare(b.date)||a.course.localeCompare(b.course)||a.classes.localeCompare(b.classes)||a.faculty.localeCompare(b.faculty)||a.room.localeCompare(b.room));
+    return rows;
+  };
+  if(mode==='merge') return [{id:'department',department:state.departmentName||'Department',programs:selected,rows:makeRows(selected)}];
+  if(mode==='groups') return (state.timetableProgramGroups||[]).map(g=>({id:g.id,department:g.department||g.name||state.departmentName||'Department',label:g.name,programs:[...(g.programs||[])],rows:makeRows(g.programs||[])})).filter(g=>g.programs.length);
+  return selected.map(prog=>({id:'program-'+prog,department:prog,label:prog,programs:[prog],rows:makeRows([prog])}));
+}
+function departmentSummaryCourseRows(rows){
+  const roomNames=[...new Set(rows.map(x=>x.room).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const map=new Map();
+  rows.forEach(x=>{const k=[x.course,x.classes,x.faculty].join('|');if(!map.has(k))map.set(k,{course:x.course,classes:x.classes,faculty:x.faculty,rooms:{},students:0});const q=map.get(k);q.rooms[x.room]=(q.rooms[x.room]||0)+x.students;q.students+=x.students;});
+  return {roomNames,data:[...map.values()].sort((a,b)=>a.course.localeCompare(b.course)||a.classes.localeCompare(b.classes)||a.faculty.localeCompare(b.faculty))};
+}
+function renderDepartmentSummary(){
+  const mapBox=document.getElementById('departmentSummaryMapping'), view=document.getElementById('departmentSummaryView');
+  if(!mapBox||!view) return;
+  initSummaryReportControls();
+  const groups=departmentSummaryGroups();
+  mapBox.innerHTML=groups.length?groups.map(g=>`<div style="display:inline-flex;align-items:center;gap:7px;margin:3px 5px 3px 0;padding:6px 10px;border:1px solid #cbd5e1;border-radius:14px;background:#f8fafc"><b>${esc(g.department||'Department')}</b><span>←</span><span>${(g.programs||[]).map(esc).join(' + ')||'No programs'}</span></div>`).join(''):'<div class="empty-state">No timetable program selection/group is available. Configure the Program-wise Timetable first.</div>';
+  if(!groups.length){view.innerHTML='';return;}
+  const html=groups.map(g=>{
+    const dg={date:'',rows:g.rows,rooms:summaryRoomsForDate(g.rows)};
+    const byDate=new Map();g.rows.forEach(x=>{if(!byDate.has(x.date))byDate.set(x.date,[]);byDate.get(x.date).push(x);});
+    const sections=[...byDate.entries()].map(([date,rows])=>{const rr=summaryRoomsForDate(rows);const {roomNames,data}=departmentSummaryCourseRows(rows);return `<div class="card" style="margin-top:12px"><h3>${esc(g.department||'Department')} — ${esc(date)}</h3><div class="tbl-wrap"><table><thead><tr><th>S.No</th><th>Subject</th><th>Class</th><th>Name of Faculty</th>${roomNames.map(esc).map(x=>`<th>${x}</th>`).join('')}<th>TOTAL</th></tr></thead><tbody>${data.map((x,i)=>`<tr><td style="text-align:center">${i+1}</td><td>${esc(x.course)}</td><td>${esc(x.classes)}</td><td>${esc(x.faculty)}</td>${roomNames.map(n=>`<td style="text-align:center">${x.rooms[n]||''}</td>`).join('')}<td style="text-align:center">${x.students}</td></tr>`).join('')}<tr style="font-weight:700;background:#f8fafc"><td colspan="4" style="text-align:center">TOTAL</td>${roomNames.map(n=>`<td style="text-align:center">${data.reduce((a,x)=>a+(x.rooms[n]||0),0)}</td>`).join('')}<td style="text-align:center">${data.reduce((a,x)=>a+x.students,0)}</td></tr></tbody></table></div></div>`;}).join('');
+    return `<div class="card" style="border-left:4px solid var(--pri)"><h3>Department: ${esc(g.department||'Department')}</h3><div class="desc"><b>Programs:</b> ${(g.programs||[]).map(esc).join(' + ')||'--'} &nbsp; | &nbsp; <b>Courses:</b> ${new Set(g.rows.map(x=>x.course+'|'+x.classes+'|'+x.faculty)).size}</div>${sections||'<div class="empty-state">No seating data matches the selected programs/date controls.</div>'}</div>`;
+  }).join('');
+  view.innerHTML=html;
+}
+function departmentSummaryExportGroups(){
+  const gs=departmentSummaryGroups();
+  return gs.map(g=>{const byDate=new Map();g.rows.forEach(x=>{if(!byDate.has(x.date))byDate.set(x.date,[]);byDate.get(x.date).push(x);});return {...g,dateGroups:[...byDate.entries()].map(([date,rows])=>({date,rows,rooms:summaryRoomsForDate(rows)}))};});
+}
+function pdfDepartmentSummary(){
+  initSummaryReportControls(); const groups=departmentSummaryExportGroups();
+  const pages=groups.flatMap(g=>g.dateGroups.map(d=>({g,d}))).filter(x=>x.d.rows.length);
+  if(!pages.length){toast('No seating data matches the current timetable department/program merging and date controls.','warn');return;}
+  const doc=new jsPDF({unit:'pt',format:'a4',orientation:'landscape'});
+  pages.forEach((x,i)=>{
+    if(i)doc.addPage(); const g=x.g,d=x.d;
+    summaryPdfSection(doc,'END SEMESTER EXAMINATIONS SEATING SUMMARY',d.date,d.rows,d.rooms,true,g.department||timetableDepartmentHeaderLabel());
+  });
+  doc.save('department-wise-summary-course-DSU.pdf'); toast(`Downloaded Department-wise Summary PDF — ${pages.length} section(s)`,'ok');
+}
+async function xlsxDepartmentSummary(){
+  initSummaryReportControls(); const groups=departmentSummaryExportGroups();
+  const pages=groups.flatMap(g=>g.dateGroups.map(d=>({g,d}))).filter(x=>x.d.rows.length);
+  if(!pages.length){toast('No seating data matches the current timetable department/program merging and date controls.','warn');return;}
+  if(typeof ExcelJS==='undefined'){toast('Excel export library is not available. Please reload the app.','err');return;}
+  const wb=new ExcelJS.Workbook(); wb.creator='DHA Suffa University'; wb.title='DSU Department-wise Summary Course Report';
+  const thin={style:'thin',color:{argb:'FF000000'}},border={top:thin,left:thin,bottom:thin,right:thin};
+  const center={horizontal:'center',vertical:'middle',wrapText:true},left={horizontal:'left',vertical:'middle',wrapText:true};
+  const tf={name:'Times New Roman',size:22,bold:true},ef={name:'Times New Roman',size:20,bold:true},mf={name:'Times New Roman',size:20,bold:true},hf={name:'Arial',size:16,bold:true,color:{argb:'FFFFFFFF'}},bf={name:'Arial',size:16};
+  const ws=wb.addWorksheet('Department Summary'); ws.views=[{showGridLines:false}]; let r=1;
+  const merge=(row,a,b,v,font,align=center,h=24)=>{ws.mergeCells(row,a,row,b);const c=ws.getCell(row,a);c.value=v;c.font=font;c.alignment=align;ws.getRow(row).height=h;};
+  pages.forEach((x,pi)=>{
+    const g=x.g,d=x.d,roomNames=d.rooms.map(rm=>rm.name),cols=4+roomNames.length+1;
+    if(pi)r+=2;
+    merge(r,4,cols,state.uniName||'DHA SUFFA UNIVERSITY',tf,center,31.5);r++;
+    merge(r,4,cols,reportExamTitle(),ef,center,25.5);r++;
+    merge(r,4,cols,g.department||state.departmentName||'Department',mf,center,25.5);r++;
+    merge(r,4,cols,summarySemesterLabel(),mf,center,25.5);r++;
+    merge(r,4,cols,`Calendar / Report Date: ${state.reportCalendarDate||'All Selected Dates'}`,{name:'Times New Roman',size:14,bold:true},center,21);r++;
+    merge(r,4,cols,`Data Date Range: ${summaryDateLabel()}`,{name:'Times New Roman',size:14,bold:true},center,21);r++;
+    merge(r,4,cols,d.date,mf,center,22.9);r++;
+    ws.getCell(r,4).border=border; roomNames.forEach((n,i)=>{const c=ws.getCell(r,5+i);c.value=d.rooms[i].capacity||'';c.font=bf;c.alignment=center;c.border=border;});ws.getCell(r,5+roomNames.length).border=border;r++;
+    const head=['S.No','Subject','Class','Name of Faculty',...roomNames,'TOTAL']; head.forEach((v,i)=>{const c=ws.getCell(r,4+i);c.value=v;c.font=hf;c.alignment=center;c.border=border;c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF000000'}};});ws.getRow(r).height=35;r++;
+    const {data}=departmentSummaryCourseRows(d.rows); data.forEach((x,i)=>{const vals=[i+1,x.course,x.classes,x.faculty,...roomNames.map(n=>x.rooms[n]||''),x.students];vals.forEach((v,j)=>{const c=ws.getCell(r,4+j);c.value=v;c.font=bf;c.alignment=(j===0||j>=4)?center:left;c.border=border;});ws.getRow(r).height=69.95;r++;});
+    const totalRow=r;ws.mergeCells(totalRow,4,totalRow,7);ws.getCell(totalRow,4).value='TOTAL';ws.getCell(totalRow,4).font=hf;ws.getCell(totalRow,4).alignment=center;ws.getCell(totalRow,4).border=border;roomNames.forEach((n,i)=>{const c=ws.getCell(totalRow,5+i);c.value=data.reduce((a,x)=>a+(x.rooms[n]||0),0);c.font=hf;c.alignment=center;c.border=border;});const tc=ws.getCell(totalRow,5+roomNames.length);tc.value=data.reduce((a,x)=>a+x.students,0);tc.font=hf;tc.alignment=center;tc.border=border;r++;
+  });
+  ws.getColumn(1).width=2;ws.getColumn(2).width=2;ws.getColumn(3).width=6;ws.getColumn(4).width=11;ws.getColumn(5).width=52.71;ws.getColumn(6).width=21.71;ws.getColumn(7).width=42.71;for(let c=8;c<ws.columnCount;c++)ws.getColumn(c).width=11.7;if(ws.columnCount>=8)ws.getColumn(ws.columnCount).width=12.71;
+  ws.pageSetup={paperSize:ws.PAPERSIZE_A4,orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0};ws.pageMargins={left:.25,right:.25,top:.25,bottom:.25,header:0,footer:0};ws.printArea=`D1:${ws.getColumn(ws.columnCount).letter}${r-1}`;
+  const buf=await wb.xlsx.writeBuffer();const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));a.download='department-wise-summary-course-DSU.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast('Downloaded Department-wise Summary Course Excel','ok');
+}
+
+/* ================= DSU ATTENDANCE SHEET PDF ================= */
+function attendanceBlocks(){
+  const blocks=[];
+  buildSeatingPlanBlocks().forEach(b=>{
+    const byRoom={};
+    b.rows.forEach(r=>{(byRoom[r.room]=byRoom[r.room]||[]).push(r);});
+    Object.keys(byRoom).sort().forEach(room=>blocks.push({...b,roomName:room,rows:byRoom[room].map((r,i)=>({...r,sno:i+1,room}))}));
+  });
+  return blocks;
+}
+function pdfAttendanceSheets(){
+  const blocks=attendanceBlocks();
+  if(!blocks.length){toast('No seating data yet -- run Generate Seating first','warn');return;}
+  const doc=new jsPDF({unit:'pt',format:'a4',orientation:'portrait'});
+  const pw=doc.internal.pageSize.getWidth(), ph=doc.internal.pageSize.getHeight();
+  const left=34, right=34, contentW=pw-left-right;
+  const black=[0,0,0];
+  const times={name:'times',style:'normal'}, timesBold={name:'times',style:'bold'};
+
+  function setFont(size,bold=false){ doc.setFont('times',bold?'bold':'normal'); doc.setFontSize(size); doc.setTextColor(...black); }
+  function center(text,y,size=14,bold=false){ setFont(size,bold); doc.text(String(text??''),pw/2,y,{align:'center'}); }
+
+  blocks.forEach((b,bi)=>{
+    if(bi) doc.addPage();
+    let y=28;
+
+    center(state.uniName||'DHA SUFFA UNIVERSITY',y+12,18,true); y+=34;
+    center(reportExamTitle(),y,14,true); y+=22;
+    center(`ATTENDANCE SHEET ROOM # ${b.roomName||'--'}`,y,15,false); y+=21;
+    center(b.classLabel||'',y,16,true); y+=20;
+
+    // Metadata is deliberately rendered as a 2-column table. This prevents long
+    // course/faculty names from colliding with Session/Time on the same baseline.
+    const metaRows=[
+      [`Course Title: ${b.courseTitle||''}`,`Session: ${b.sessionText||''}`],
+      [`Subject Teacher: ${b.faculty||''}`,`Time: ${b.timeText||''}`],
+      ['',`Date: ${b.dateText||''}`]
+    ];
+    doc.autoTable({
+      body:metaRows,
+      startY:y,
+      margin:{left,right},
+      theme:'plain',
+      styles:{font:'times',fontSize:11.5,fontStyle:'bold',textColor:black,cellPadding:{top:2,right:4,bottom:3,left:4},valign:'middle',overflow:'linebreak'},
+      columnStyles:{0:{cellWidth:contentW*0.58,halign:'left'},1:{cellWidth:contentW*0.42,halign:'left'}},
+      didParseCell:data=>{ data.cell.styles.minCellHeight=18; }
+    });
+    y=doc.lastAutoTable.finalY+8;
+
+    const head=['S.No.','Reg No.','Name','Seating Plan','Copy No.','Signature / Remarks'];
+    const data=b.rows.map(r=>[r.sno,r.reg,r.name,r.seat,'','']);
+    doc.autoTable({
+      head:[head], body:data, startY:y,
+      margin:{left,right,bottom:34},
+      theme:'grid',
+      styles:{font:'times',fontSize:9.2,cellPadding:{top:3,right:3,bottom:3,left:3},textColor:black,lineColor:black,lineWidth:.5,halign:'center',valign:'middle',overflow:'linebreak',minCellHeight:18},
+      headStyles:{font:'times',fontStyle:'bold',fontSize:10,fillColor:[255,255,255],textColor:black,lineColor:black,lineWidth:.7,halign:'center',valign:'middle'},
+      columnStyles:{0:{cellWidth:35},1:{cellWidth:65},2:{cellWidth:126,halign:'left'},3:{cellWidth:84},4:{cellWidth:50},5:{cellWidth:151,halign:'left'}},
+      rowPageBreak:'avoid',
+      showHead:'everyPage'
+    });
+    y=doc.lastAutoTable.finalY+12;
+
+    // Script-count section, matching the DSU attendance-sheet terminology.
+    if(y+65>ph-34){doc.addPage();y=40;}
+    doc.autoTable({
+      head:[['Class','Total Student','No.of Subj.Scripts','','No.of Obj.Scripts','Total']],
+      body:[[b.classLabel||'',b.rows.length,'','','','']],
+      startY:y, margin:{left,right}, theme:'grid',
+      styles:{font:'times',fontSize:9,cellPadding:3,textColor:black,lineColor:black,lineWidth:.5,halign:'center',valign:'middle',overflow:'linebreak'},
+      headStyles:{font:'times',fontStyle:'bold',fontSize:9,fillColor:[255,255,255],textColor:black,lineColor:black,lineWidth:.5},
+      columnStyles:{0:{cellWidth:72},1:{cellWidth:82},2:{cellWidth:88},3:{cellWidth:18},4:{cellWidth:88},5:{cellWidth:72}}
+    });
+    y=doc.lastAutoTable.finalY+18;
+
+    if(y+145>ph-30){doc.addPage();y=42;}
+    setFont(11.5,true);
+    doc.text('Name of Invigilator(s):',left,y);
+    doc.text('Signature of Invigilator(s)',pw/2+8,y);
+    y+=22; setFont(11.5,false);
+    doc.text('1. _____________',left,y); doc.text('1. _____________',pw/2+8,y);
+    y+=21; doc.text('2. _____________',left,y); doc.text('2. _____________',pw/2+8,y);
+    y+=30;
+    doc.text('Name of Person Receiving: ________________________',left,y);
+    y+=22; doc.text('Signature of Person Receiving: _____________________',left,y);
+    y+=22; doc.text('Date: ________________',left,y);
+  });
+  doc.save('attendance-sheets-DSU.pdf');
+  toast(`Downloaded DSU Attendance Sheet PDF — ${blocks.length} room/course page(s)`,'ok');
+}
+
+/* ================= DSU ATTENDANCE SHEET EXCEL ================= */
+async function xlsxAttendanceSheets(){
+  const blocks=attendanceBlocks();
+  if(!blocks.length){toast('No seating data yet -- run Generate Seating first','warn');return;}
+  if(typeof ExcelJS==='undefined'){toast('Excel export library is not available. Please reload the app.','err');return;}
+  const wb=new ExcelJS.Workbook();
+  wb.creator='DHA Suffa University';
+  wb.subject='DSU Attendance Sheets';
+  wb.title='DSU Attendance Sheets';
+  const thin={style:'thin',color:{argb:'FF000000'}};
+  const border={top:thin,left:thin,bottom:thin,right:thin};
+  const titleFont={name:'Times New Roman',size:18,bold:true};
+  const examFont={name:'Times New Roman',size:14,bold:true};
+  const sectionFont={name:'Times New Roman',size:15,bold:true};
+  const labelFont={name:'Times New Roman',size:12,bold:true};
+  const bodyFont={name:'Times New Roman',size:11};
+  const headFont={name:'Times New Roman',size:11,bold:true};
+  const center={horizontal:'center',vertical:'middle',wrapText:true};
+  const leftAlign={horizontal:'left',vertical:'middle',wrapText:true};
+
+  function setup(ws){
+    [1,10,13,38,17,16,38].forEach((w,i)=>ws.getColumn(i+1).width=w);
+    ws.pageSetup={paperSize:ws.PAPERSIZE_A4,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0};
+    ws.pageMargins={left:.25,right:.25,top:.25,bottom:.25,header:0,footer:0};
+    ws.views=[{showGridLines:false}];
+  }
+  function merge(ws,row,a,b,value,font,alignment=center,height=24){
+    ws.mergeCells(row,a,row,b); const c=ws.getCell(row,a); c.value=value; c.font=font; c.alignment=alignment; ws.getRow(row).height=height;
+  }
+  blocks.forEach((b,bi)=>{
+    // One worksheet per room/course keeps the exported attendance sheets directly printable.
+    const safe=(b.classLabel||'Course').replace(/[:\\/?*\[\]]/g,' ').slice(0,20);
+    const ws=wb.addWorksheet(`${String(bi+1).padStart(2,'0')} ${safe}`); setup(ws);
+    let r=1;
+    merge(ws,r,2,7,state.uniName||'DHA SUFFA UNIVERSITY',titleFont,center,27); r++;
+    merge(ws,r,2,7,reportExamTitle(),examFont,center,22); r++;
+    merge(ws,r,2,7,excelDepartmentHeaderLabel(),{name:'Times New Roman',size:13,bold:true},center,20); r++;
+    merge(ws,r,2,7,`ATTENDANCE SHEET ROOM # ${b.roomName||'--'}`,sectionFont,center,25); r++;
+    merge(ws,r,2,7,b.classLabel||'',sectionFont,center,25); r++;
+    ws.mergeCells(r,2,r,4); ws.getCell(r,2).value='Course Title:'; ws.getCell(r,2).font=labelFont; ws.getCell(r,2).alignment=leftAlign;
+    ws.mergeCells(r,5,r,6); ws.getCell(r,5).value=b.courseTitle||''; ws.getCell(r,5).font=labelFont; ws.getCell(r,5).alignment=leftAlign;
+    ws.getCell(r,7).value=`Session: ${b.sessionText||''}`; ws.getCell(r,7).font=labelFont; ws.getCell(r,7).alignment=leftAlign; ws.getRow(r).height=30; r++;
+    ws.mergeCells(r,2,r,4); ws.getCell(r,2).value='Subject Teacher:'; ws.getCell(r,2).font=labelFont; ws.getCell(r,2).alignment=leftAlign;
+    ws.mergeCells(r,5,r,6); ws.getCell(r,5).value=b.faculty||''; ws.getCell(r,5).font=labelFont; ws.getCell(r,5).alignment=leftAlign;
+    ws.getCell(r,7).value=`Time: ${b.timeText||''}`; ws.getCell(r,7).font=labelFont; ws.getCell(r,7).alignment=leftAlign; ws.getRow(r).height=30; r++;
+    ws.getCell(r,6).value='Date:'; ws.getCell(r,6).font=labelFont; ws.getCell(r,6).alignment=leftAlign; ws.getCell(r,7).value=b.dateText||''; ws.getCell(r,7).font=labelFont; ws.getCell(r,7).alignment=leftAlign; ws.getRow(r).height=24; r++;
+    ['S.No.','Reg No.','Name','Seating Plan','Copy No.','Signature / Remarks'].forEach((v,c)=>{const cell=ws.getCell(r,c+2);cell.value=v;cell.font=headFont;cell.alignment=center;cell.border=border;}); ws.getRow(r).height=26; r++;
+    b.rows.forEach(row=>{[row.sno,row.reg,row.name,row.seat,'',''].forEach((v,c)=>{const cell=ws.getCell(r,c+2);cell.value=v;cell.font=bodyFont;cell.alignment=c===2?leftAlign:center;cell.border=border;});ws.getRow(r).height=24;r++;});
+    r++;
+    ['Class','Total Student','No.of Subj.Scripts','','No.of Obj.Scripts','Total'].forEach((v,c)=>{const cell=ws.getCell(r,c+2);cell.value=v;cell.font=headFont;cell.alignment=center;cell.border=border;}); r++;
+    [b.classLabel||'',b.rows.length,'','','',''].forEach((v,c)=>{const cell=ws.getCell(r,c+2);cell.value=v;cell.font=bodyFont;cell.alignment=center;cell.border=border;}); r+=2;
+    ws.mergeCells(r,2,r,4); ws.getCell(r,2).value='Name of Invigilator(s):'; ws.getCell(r,2).font=labelFont; ws.getCell(r,2).alignment=leftAlign;
+    ws.mergeCells(r,5,r,7); ws.getCell(r,5).value='Signature of Invigilator(s)'; ws.getCell(r,5).font=labelFont; ws.getCell(r,5).alignment=leftAlign; r++;
+    merge(ws,r,2,4,'1. _____________',bodyFont,leftAlign,24); merge(ws,r,5,7,'1. _____________',bodyFont,leftAlign,24); r++;
+    merge(ws,r,2,4,'2. _____________',bodyFont,leftAlign,24); merge(ws,r,5,7,'2. _____________',bodyFont,leftAlign,24); r+=2;
+    merge(ws,r,2,7,'Name of Person Receiving: ________________________',bodyFont,leftAlign,24); r++;
+    merge(ws,r,2,7,'Signature of Person Receiving: _____________________',bodyFont,leftAlign,24); r++;
+    merge(ws,r,2,7,'Date: ________________',bodyFont,leftAlign,24);
+    ws.printArea=`B1:G${r}`;
+  });
+  const buf=await wb.xlsx.writeBuffer();
+  const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='attendance-sheets-DSU.xlsx'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  toast(`Downloaded DSU Attendance Sheet Excel — ${blocks.length} sheet(s)`,'ok');
+}
+
+
+/* ================= PDF EXPORTS ================= */
+const { jsPDF } = window.jspdf;
+function pdfHeader(doc, title, sub){
+  doc.setFontSize(15).setFont('helvetica','bold').text(title, 40, 40);
+  if(sub){ doc.setFontSize(10).setFont('helvetica','normal').text(sub, 40, 56); }
+}
+// Draws a 3-way signature block (HOD / Dean / Controller of Examination)
+// near the bottom of whichever page is currently active in the doc -- a
+// line with the role label centered underneath it. Call this right after
+// the last autoTable for a page/section has been drawn, before addPage()
+// moves on to the next section, so it lands on that section's final page.
+function pdfSignatureBlock(doc){
+  const pw = doc.internal.pageSize.getWidth();
+  const ph = doc.internal.pageSize.getHeight();
+  const y = ph - 60;
+  const labelY = y + 14;
+  const margin = 50;
+  const lineW = 140;
+  const leftX = margin;
+  const midX = (pw - lineW) / 2;
+  const rightX = pw - margin - lineW;
+  doc.setDrawColor(60,60,60).setLineWidth(0.75);
+  [[leftX,'HOD'],[midX,'Dean'],[rightX,'Controller of Examination']].forEach(([x,label])=>{
+    doc.line(x, y, x + lineW, y);
+    doc.setFontSize(9).setFont('helvetica','normal').setTextColor(40,40,40);
+    doc.text(label, x + lineW/2, labelY, {align:'center'});
+  });
+  doc.setTextColor(0,0,0);
+}
+function programDateSheetData(prog){
+  const all=[];
+  const tags=taggedCourseSet();
+  const scheduled=state.scheduled.map(sc=>{
+    const c=state.courses.find(x=>x.id===sc.courseId), sess=state.sessions.find(x=>x.id===sc.sessionId);
+    return c&&sess&&c.program===prog&&tags.has(c.id) ? {c,sc,sess}:null;
+  }).filter(Boolean);
+  const sessionTypes=new Map();
+  scheduled.forEach(e=>{
+    const key=`${e.sess.label||''}|${e.sess.startTime||''}|${e.sess.endTime||''}`;
+    if(!sessionTypes.has(key)) sessionTypes.set(key,{label:e.sess.label,startTime:e.sess.startTime,endTime:e.sess.endTime,items:[]});
+    sessionTypes.get(key).items.push(e);
+  });
+  [...sessionTypes.values()].forEach(st=>{
+    const dates=[...new Set(st.items.map(e=>e.sess.date))].sort();
+    const byClass=new Map();
+    st.items.forEach(e=>{
+      const cls=e.c.section || e.c.className || e.c.program || 'Class';
+      if(!byClass.has(cls)) byClass.set(cls,{});
+      const map=byClass.get(cls), key=e.sess.date;
+      const entry=`${e.c.title||''}\n${e.c.code||''}\n${e.c.faculty||''}`.trim();
+      map[key]=map[key] ? `${map[key]}\n\n${entry}` : entry;
+    });
+    all.push({session:{label:st.label,startTime:st.startTime,endTime:st.endTime},dates,classes:[...byClass.entries()].sort((a,b)=>String(a[0]).localeCompare(String(b[0]))),exams:st.items});
+  });
+  all.sort((a,b)=>String(a.session.startTime||'').localeCompare(String(b.session.startTime||'')));
+  return all;
+}
+
+// Build the same matrix used by the supplied workbook, but optionally combine
+// several programs into one department report. In merge mode the department
+// heading is emitted once; programs are represented in the class/section label.
+function departmentDateSheetData(){
+  const progs=[...new Set(state.courses.map(c=>c.program).filter(Boolean))].sort();
+  const tags=taggedCourseSet();
+  const scheduled=state.scheduled.map(sc=>{
+    const c=state.courses.find(x=>x.id===sc.courseId), sess=state.sessions.find(x=>x.id===sc.sessionId);
+    return c&&sess&&progs.includes(c.program)&&tags.has(c.id) ? {c,sc,sess}:null;
+  }).filter(Boolean);
+  const sessionTypes=new Map();
+  scheduled.forEach(e=>{
+    const key=`${e.sess.label||''}|${e.sess.startTime||''}|${e.sess.endTime||''}`;
+    if(!sessionTypes.has(key)) sessionTypes.set(key,{label:e.sess.label,startTime:e.sess.startTime,endTime:e.sess.endTime,items:[]});
+    sessionTypes.get(key).items.push(e);
+  });
+  const all=[];
+  [...sessionTypes.values()].forEach(st=>{
+    const dates=[...new Set(st.items.map(e=>e.sess.date))].sort();
+    const byClass=new Map();
+    st.items.forEach(e=>{
+      const base=e.c.section || e.c.className || 'Class';
+      const cls=`${e.c.program ? e.c.program+' - ' : ''}${base}`;
+      if(!byClass.has(cls)) byClass.set(cls,[]);
+      byClass.get(cls).push(e);
+    });
+    all.push({session:{label:st.label,startTime:st.startTime,endTime:st.endTime},dates,classes:[...byClass.keys()].sort((a,b)=>String(a).localeCompare(String(b))),exams:st.items});
+  });
+  all.sort((a,b)=>String(a.session.startTime||'').localeCompare(String(b.session.startTime||'')));
+  return all;
+}
+function timetableReportCourseList(){
+  const scheduledIds=new Set(state.scheduled.map(sc=>sc.courseId));
+  return state.courses.filter(c=>scheduledIds.has(c.id)).sort((a,b)=>String(a.program||'').localeCompare(String(b.program||''))||String(a.section||a.className||'').localeCompare(String(b.section||b.className||''))||String(a.code||'').localeCompare(String(b.code||'')));
+}
+function timetableAvailablePrograms(){
+  return [...new Set(timetableReportCourseList().map(c=>c.program).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b)));
+}
+function normalizeTimetableProgramTags(){
+  const available=new Set(timetableAvailablePrograms());
+  if(!Array.isArray(state.timetableTaggedPrograms)) state.timetableTaggedPrograms=[...available];
+  state.timetableTaggedPrograms=state.timetableTaggedPrograms.filter(p=>available.has(p));
+}
+function renderTimetableProgramControls(){
+  normalizeTimetableProgramTags();
+  const pbox=document.getElementById('timetableProgramTagList');
+  const dept=document.getElementById('timetableDepartmentName');
+  if(dept && dept.value!==String(state.departmentName||'')) dept.value=state.departmentName||'';
+  if(pbox){
+    const progs=timetableAvailablePrograms();
+    pbox.innerHTML=progs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:6px">${progs.map(p=>`<label style="display:flex;gap:7px;align-items:center;font-weight:normal;padding:7px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px"><input type="checkbox" ${state.timetableTaggedPrograms.includes(p)?'checked':''} onchange="toggleTimetableProgramTag('${esc(p)}',this.checked)"><b>${esc(p)}</b></label>`).join('')}</div>` : '<div class="empty-state">No scheduled programs available. Run Auto Schedule first.</div>';
+  }
+  const gb=document.getElementById('timetableGroupBuilder');
+  if(gb){
+    const mode=document.getElementById('timetableReportMode')?.value || state.timetableReportMode || 'separate';
+    if(mode!=='groups') { gb.innerHTML=''; return; }
+    const groups=Array.isArray(state.timetableProgramGroups)?state.timetableProgramGroups:[];
+    gb.innerHTML=`<div style="font-weight:700;margin-bottom:7px">Program Groups</div>
+      <div class="desc" style="margin-bottom:8px">Select programs above, enter a group name and department, then create a group. Each group becomes one date-sheet report.</div>
+      <div class="row" style="align-items:center;flex-wrap:wrap">
+        <input id="newTimetableGroupName" placeholder="Group name e.g. Management Sciences" style="min-width:240px">
+        <input id="newTimetableGroupDept" value="${esc(state.departmentName||'')}" placeholder="Department name" style="min-width:300px">
+        <button class="btn" onclick="createTimetableProgramGroup()">➕ Create Group from Ticked Programs</button>
+      </div>
+      <div style="margin-top:10px">${groups.length?groups.map(g=>`<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px;border:1px solid #e2e8f0;border-radius:7px;margin-top:6px;background:#f8fafc"><div><b>${esc(g.name)}</b> <span class="muted">— ${esc(g.department||'')}</span><div class="desc">${g.programs.map(esc).join(' + ')}</div></div><button class="btn ghost" onclick="deleteTimetableProgramGroup('${g.id}')">🗑 Remove</button></div>`).join(''):'<div class="desc">No custom groups created yet.</div>'}</div>`;
+  }
+}
+function toggleTimetableProgramTag(program,checked){
+  normalizeTimetableProgramTags();
+  const set=new Set(state.timetableTaggedPrograms); checked?set.add(program):set.delete(program);
+  state.timetableTaggedPrograms=[...set]; save(); renderTimetableProgramControls(); renderTimetableCourseTags();
+}
+function tagAllTimetablePrograms(checked){
+  state.timetableTaggedPrograms=checked?timetableAvailablePrograms():[]; save(); renderTimetableProgramControls(); renderTimetableCourseTags();
+}
+function createTimetableProgramGroup(){
+  normalizeTimetableProgramTags();
+  const programs=[...state.timetableTaggedPrograms];
+  if(!programs.length){toast('Tick at least one program first','warn');return;}
+  const name=(document.getElementById('newTimetableGroupName')?.value||'').trim();
+  const dept=(document.getElementById('newTimetableGroupDept')?.value||state.departmentName||'').trim();
+  if(!name){toast('Enter a group name','warn');return;}
+  state.timetableProgramGroups=Array.isArray(state.timetableProgramGroups)?state.timetableProgramGroups:[];
+  state.timetableProgramGroups.push({id:uid(),name,department:dept,programs});
+  state.departmentName=dept||state.departmentName; save(); renderTimetableProgramControls(); toast(`Created group "${name}" with ${programs.length} program(s)`,'ok');
+}
+function deleteTimetableProgramGroup(id){
+  state.timetableProgramGroups=(state.timetableProgramGroups||[]).filter(g=>g.id!==id); save(); renderTimetableProgramControls();
+}
+function normalizeTimetableTags(){
+  const available=new Set(timetableReportCourseList().map(c=>c.id));
+  if(!Array.isArray(state.timetableTaggedCourses)) state.timetableTaggedCourses=[...available];
+  state.timetableTaggedCourses=state.timetableTaggedCourses.filter(id=>available.has(id));
+}
+function renderTimetableCourseTags(){
+  normalizeTimetableTags(); normalizeTimetableProgramTags();
+  const box=document.getElementById('timetableCourseTagList'); if(!box) return;
+  const courses=timetableReportCourseList().filter(c=>state.timetableTaggedPrograms.includes(c.program));
+  if(!courses.length){box.innerHTML='<div class="empty-state">No scheduled courses available for the ticked programs. Tick programs or run Auto Schedule first.</div>';return;}
+  const grouped={}; courses.forEach(c=>(grouped[c.program||'Unassigned']??=[]).push(c));
+  box.innerHTML=Object.entries(grouped).map(([prog,list])=>`<div style="margin:8px 0;border:1px solid #e2e8f0;border-radius:8px;padding:8px"><div style="font-weight:700;margin-bottom:6px">${esc(prog)} <span class="muted">(${list.length})</span></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:5px">${list.map(c=>{const checked=state.timetableTaggedCourses.includes(c.id); const label=`${c.code||''}${c.title?' — '+c.title:''}${c.section?' — '+c.section:''}`; return `<label style="display:flex;gap:7px;align-items:flex-start;font-weight:normal;padding:5px;background:#f8fafc;border-radius:5px"><input type="checkbox" ${checked?'checked':''} onchange="toggleTimetableCourseTag('${c.id}',this.checked)"><span>${esc(label)}</span></label>`}).join('')}</div></div>`).join('');
+}
+function toggleTimetableCourseTag(id,checked){
+  normalizeTimetableTags();
+  const set=new Set(state.timetableTaggedCourses); checked?set.add(id):set.delete(id);
+  state.timetableTaggedCourses=[...set]; save();
+}
+function tagAllTimetableCourses(checked){
+  normalizeTimetableProgramTags(); const ids=timetableReportCourseList().filter(c=>state.timetableTaggedPrograms.includes(c.program)).map(c=>c.id); state.timetableTaggedCourses=checked?ids:[]; save(); renderTimetableCourseTags();
+}
+function taggedCourseSet(){normalizeTimetableTags(); return new Set(state.timetableTaggedCourses);}
+function selectedTimetablePrograms(){normalizeTimetableProgramTags(); return [...state.timetableTaggedPrograms];}
+
+function timetableReportBlocks(){
+  const mode=document.getElementById('timetableReportMode')?.value || state.timetableReportMode || 'separate';
+  state.timetableReportMode=mode;
+  const selected=selectedTimetablePrograms();
+  if(mode==='merge'){
+    const allowed=new Set(selected);
+    const blocks=departmentDateSheetData().filter(b=>b.exams.some(e=>allowed.has(e.c.program)));
+    blocks.forEach(b=>{
+      b.exams=b.exams.filter(e=>allowed.has(e.c.program));
+      // In MERGE mode the selected programs are one report, so never prefix
+      // class labels with individual program names. This is important because
+      // the same class/section can exist across multiple merged programs and
+      // must appear as one merged class row in the report.
+      b.classes=[...new Set(b.exams.map(e=>e.c.section||e.c.className||'Class'))].sort((a,b)=>String(a).localeCompare(String(b)));
+      b.dates=[...new Set(b.exams.map(e=>e.sess.date))].sort();
+    });
+    return [{key:'department',label:state.departmentName||'Department',department:state.departmentName||'Department',programs:selected,blocks}];
+  }
+  if(mode==='groups'){
+    return (state.timetableProgramGroups||[]).map(g=>{
+      const allowed=new Set(g.programs||[]);
+      const blocks=departmentDateSheetData().filter(b=>b.exams.some(e=>allowed.has(e.c.program))).map(b=>{b.exams=b.exams.filter(e=>allowed.has(e.c.program));b.classes=[...new Set(b.exams.map(e=>`${e.c.program ? e.c.program+' - ' : ''}${e.c.section||e.c.className||'Class'}`))].sort();b.dates=[...new Set(b.exams.map(e=>e.sess.date))].sort();return b;});
+      return {key:g.id,label:g.name,department:g.department||state.departmentName||'',programs:[...allowed],blocks};
+    }).filter(r=>r.blocks.length);
+  }
+  return selected.map(prog=>({key:prog,label:prog,department:state.departmentName||'',programs:[prog],blocks:programDateSheetBlocksForReport(prog)}));
+}
+function programDateSheetBlocksForReport(prog){
+  return programDateSheetData(prog).filter(b=>b.exams.some(e=>taggedCourseSet().has(e.c.id)));
+}
+function departmentDateSheetData(){
+  const tags=taggedCourseSet();
+  const allowed=selectedTimetablePrograms();
+  const scheduled=state.scheduled.map(sc=>{const c=state.courses.find(x=>x.id===sc.courseId),sess=state.sessions.find(x=>x.id===sc.sessionId);return c&&sess&&allowed.includes(c.program)&&tags.has(c.id)?{c,sc,sess}:null;}).filter(Boolean);
+  const sessionTypes=new Map();
+  scheduled.forEach(e=>{const key=`${e.sess.label||''}|${e.sess.startTime||''}|${e.sess.endTime||''}`;if(!sessionTypes.has(key))sessionTypes.set(key,{label:e.sess.label,startTime:e.sess.startTime,endTime:e.sess.endTime,items:[]});sessionTypes.get(key).items.push(e);});
+  const all=[]; [...sessionTypes.values()].forEach(st=>{const dates=[...new Set(st.items.map(e=>e.sess.date))].sort();const byClass=new Map();st.items.forEach(e=>{const base=e.c.section||e.c.className||'Class';const cls=`${e.c.program ? e.c.program+' - ' : ''}${base}`;if(!byClass.has(cls))byClass.set(cls,[]);byClass.get(cls).push(e);});all.push({session:{label:st.label,startTime:st.startTime,endTime:st.endTime},dates,classes:[...byClass.keys()].sort((a,b)=>String(a).localeCompare(String(b))),exams:st.items});});
+  all.sort((a,b)=>String(a.session.startTime||'').localeCompare(String(b.session.startTime||''))); return all;
+}
+
+function formatDateSheetDate(v){
+  if(!v) return '';
+  const d=new Date(v+'T00:00:00');
+  return isNaN(d) ? v : d.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'});
+}
+function dateSheetSessionLabel(sess){
+  const start=String(sess.startTime||'').replace(':','');
+  const end=String(sess.endTime||'').replace(':','');
+  const roman=(sess.label||'').match(/morning/i)?'I':(sess.label||'').match(/mid/i)?'II':(sess.label||'').match(/afternoon/i)?'II':(sess.label||'').match(/evening/i)?'III':'';
+  return `Session ${roman || ''} (${start} to ${end})`.replace('Session  (','Session (');
+}
+function dateSheetCellText(exams){
+  return exams.map(({c})=>`${c.title||''}\n${c.code||''}\n${c.faculty||''}`).join('\n\n');
+}
+function dateSheetCourseText(exam){
+  if(!exam || !exam.c) return '';
+  const c=exam.c;
+  return `${c.title||''}\n${c.code||''}\n${c.faculty||''}`.trim();
+}
+function mergedClassExams(block, cls){
+  // Merge mode deliberately matches only the class/section, not the program.
+  // The program filter has already been applied by timetableReportBlocks(),
+  // so all selected programs contribute to the same merged class row.
+  return block.exams.filter(e=>{
+    const base=e.c.section || e.c.className || 'Class';
+    return base===cls;
+  });
+}
+function buildProgramDateSheet(prog, block){
+  const dates=block.dates;
+  const classes=block.classes;
+  const dateExamMap=new Map();
+  block.exams.forEach(e=>{
+    const cls=e.c.section || e.c.className || e.c.program || 'Class';
+    const key=cls+'|'+e.sess.date;
+    if(!dateExamMap.has(key)) dateExamMap.set(key,[]);
+    dateExamMap.get(key).push(e);
+  });
+  return {prog,block,dates,classes,dateExamMap};
+}
+function renderExactDSUDateSheet(report, block){
+  const dates=block.dates, classes=block.classes;
+  const mode=state.timetableReportMode||'separate';
+  let html=`<div class="dsu-date-sheet-preview dsu-exact-preview">`;
+  html+=`<div class="dsu-ref-row dsu-ref-title">Final Date Sheet</div>`;
+  html+=`<div class="dsu-ref-row dsu-ref-exam">${esc(reportExamTitle())}</div>`;
+  html+=`<div class="dsu-ref-row dsu-ref-dept">${esc(report.department||state.departmentName||'')}</div>`;
+  html+=`<div class="dsu-ref-row dsu-ref-session">${esc(dateSheetSessionLabel(block.session))}</div>`;
+  html+=`<table class="dsu-date-table dsu-reference-table"><thead><tr><th rowspan="2">Class / Day / Date</th>${dates.map(dt=>`<th>${esc(dayName(dt))}</th>`).join('')}</tr><tr>${dates.map(dt=>`<th>${esc(formatDateSheetDate(dt))}</th>`).join('')}</tr></thead><tbody>`;
+  classes.forEach(cls=>{
+    const rowExams = mode==='merge' ? null : null;
+    html+=`<tr><th>${esc(cls)}</th>${dates.map(dt=>{ const exams=mode==='merge' ? mergedClassExams(block,cls).filter(e=>e.sess.date===dt) : block.exams.filter(e=>(e.c.section||e.c.className||e.c.program||'Class')===cls&&e.sess.date===dt); return `<td>${esc(dateSheetCellText(exams))}</td>`; }).join('')}</tr>`;
+  });
+  for(let i=classes.length;i<14;i++) html+=`<tr class="dsu-blank-row"><td></td>${dates.map(()=>'<td></td>').join('')}</tr>`;
+  html+=`</tbody></table>`;
+  html+=`<div class="dsu-ref-spacer" style="height:90px"></div>`;
+  html+=`<div class="dsu-ref-signatures"><span>Assistant Controller of Examination</span><span>${mode==='merge'?'HOD':`HOD (${esc(report.label)})`}</span><span>Dean</span><span>Controller of Examinations</span></div>`;
+  html+=`</div>`;
+  return html;
+}
+function syncTimetableReportMode(){const el=document.getElementById('timetableReportMode');if(el) el.value=state.timetableReportMode||'separate'; renderTimetableProgramControls(); renderTimetableCourseTags();}
+function previewTimetableProgram(){ return; }
+function pdfTimetableProgram(){
+  const doc=new jsPDF({unit:'pt',format:'a4',orientation:'landscape'});
+  const pw=doc.internal.pageSize.getWidth(), ph=doc.internal.pageSize.getHeight();
+  const reports=timetableReportBlocks(); let page=0;
+  reports.forEach(report=>report.blocks.forEach(block=>{
+    if(page++) doc.addPage();
+    const dates=block.dates, classes=block.classes, mode=state.timetableReportMode||'separate';
+    // Match the reference ordering: Final Date Sheet, examination title,
+    // department, session, then the two-row Class/Day/Date header.
+    doc.setTextColor(0,0,0); doc.setFont('times','bold');
+    doc.setFontSize(18); doc.text('Final Date Sheet',pw/2,34,{align:'center'});
+    doc.setFontSize(13); doc.text(reportExamTitle(),pw/2,54,{align:'center'});
+    doc.setFontSize(12); doc.text(report.department||state.departmentName||'',pw/2,74,{align:'center'});
+    doc.setFontSize(12); doc.text(dateSheetSessionLabel(block.session),pw/2,94,{align:'center'});
+    // PDF follows the supplied reference's single-page signature layout. Blank
+    // spreadsheet spacer rows are intentionally NOT drawn in PDF because they
+    // create unwanted horizontal lines. The whitespace is reserved instead.
+    const body=classes.map(cls=>[cls,...dates.map(dt=>{const exs=mode==='merge'?mergedClassExams(block,cls).filter(e=>e.sess.date===dt):block.exams.filter(e=>(e.c.section||e.c.className||e.c.program||'Class')===cls&&e.sess.date===dt);return dateSheetCellText(exs);})]);
+    const head=[['Class / Day / Date',...dates.map(dayName)],['',...dates.map(formatDateSheetDate)]];
+    const baseFont=body.length>10?5.5:(body.length>8?6.25:(body.length>6?7:8));
+    doc.autoTable({head,body,startY:105,margin:{left:24,right:24,bottom:92},styles:{font:'times',fontSize:baseFont,cellPadding:2,halign:'center',valign:'middle',lineColor:[0,0,0],lineWidth:.35,fillColor:[255,255,255],textColor:[0,0,0],overflow:'linebreak'},headStyles:{font:'times',fontSize:Math.max(7,baseFont+1),fontStyle:'bold',fillColor:[255,255,255],textColor:[0,0,0],cellPadding:2},columnStyles:{0:{cellWidth:85,halign:'center'}},rowPageBreak:'avoid',didParseCell:d=>{if(d.section==='body'){d.cell.styles.fillColor=[255,255,255];d.cell.styles.textColor=[0,0,0];d.cell.styles.font='times';d.cell.styles.fontStyle=d.column.index===0?'bold':'normal';}},didDrawCell:d=>{
+      if(d.section==='body' && d.column.index>0){
+        const raw=String(d.cell.raw||'').trim();
+        if(raw){
+          const parts=raw.split(/\n\n/).filter(Boolean);
+          if(parts.length>1){
+            // Exactly one real separator line between each adjacent course block.
+            doc.setDrawColor(0,0,0).setLineWidth(.35);
+            const step=d.cell.height/parts.length;
+            for(let k=1;k<parts.length;k++){
+              const yy=d.cell.y + step*k;
+              doc.line(d.cell.x+2,yy,d.cell.x+d.cell.width-2,yy);
+            }
+          }
+        }
+      }
+    }});
+    // Keep all four signatories together, in one line, at the bottom of the same
+    // page -- a short signature line drawn just above each designation name.
+    const sigLabels=['Assistant Controller of Examination',mode==='merge'?'HOD':`HOD (${report.label})`,'Dean','Controller of Examinations'];
+    const sigY=ph-30, lineY=sigY-12, colW=(pw-96)/sigLabels.length;
+    doc.setDrawColor(0,0,0).setLineWidth(.5);
+    doc.setFont('times','bold').setFontSize(8.5);
+    sigLabels.forEach((label,i)=>{
+      const cx=48+colW*i+colW/2;
+      doc.line(cx-65,lineY,cx+65,lineY);
+      doc.text(label,cx,sigY,{align:'center'});
+    });
+  }));
+  if(!page) pdfHeader(doc,'No data','Run Auto Schedule first.');
+  doc.save('timetable-program-wise-dsu-final-date-sheet.pdf');
+}
+function xlsxTimetableProgram(){
+  const reports=timetableReportBlocks();
+  const valid=reports.filter(r=>r.blocks.length);
+  if(!valid.length){toast('No scheduled program-wise timetable data -- run Auto Schedule first','warn');return;}
+  if(typeof ExcelJS==='undefined'){toast('Excel export library is not available. Please reload the app.','err');return;}
+  const wb=new ExcelJS.Workbook(); wb.creator='DHA Suffa University'; wb.subject='Program-wise Final Date Sheet'; wb.title='Program-wise Timetable — Exact DSU Final Date Sheet';
+  const thin={style:'thin',color:{argb:'FF000000'}}, border={top:thin,bottom:thin,left:thin,right:thin};
+  const center={horizontal:'center',vertical:'middle',wrapText:true};
+  const addReport=(ws,report,block,startRow)=>{
+    const dates=block.dates, classes=block.classes, maxCol=dates.length+1, mode=state.timetableReportMode||'separate';
+    let r=startRow;
+    // Exact reference row structure: rows 1-4 headings, rows 5-7 date header,
+    // class rows, then blank rows and signature/controller rows.
+    ws.getCell(r,1).value='Final Date Sheet'; ws.mergeCells(r,1,r,maxCol); ws.getRow(r).height=45.4; ws.getCell(r,1).font={name:'Arial',size:36,bold:true}; ws.getCell(r,1).alignment=center; r++;
+    ws.getCell(r,1).value=reportExamTitle(); ws.mergeCells(r,1,r,maxCol); ws.getRow(r).height=24.95; ws.getCell(r,1).font={name:'Arial',size:22,bold:true}; ws.getCell(r,1).alignment=center; r++;
+    ws.getCell(r,1).value=report.department||state.departmentName||''; ws.mergeCells(r,1,r,maxCol); ws.getRow(r).height=27.75; ws.getCell(r,1).font={name:'Arial',size:22,bold:true}; ws.getCell(r,1).alignment=center; ws.getCell(r,1).border={bottom:thin}; r++;
+    ws.getCell(r,1).value=dateSheetSessionLabel(block.session); ws.mergeCells(r,1,r,maxCol); ws.getRow(r).height=27.75; ws.getCell(r,1).font={name:'Arial',size:22,bold:true}; ws.getCell(r,1).alignment=center; ws.getCell(r,1).border={top:thin,bottom:thin}; r++;
+    const dayRow=r,dateRow=r+1,blankRow=r+2;
+    ws.getCell(dayRow,1).value='Class / Day / Date'; ws.mergeCells(dayRow,1,dateRow,1);
+    dates.forEach((dt,i)=>{ws.getCell(dayRow,2+i).value=dayName(dt);ws.getCell(dateRow,2+i).value=formatDateSheetDate(dt);});
+    for(let c=1;c<=maxCol;c++) for(const rr of [dayRow,dateRow]){const cell=ws.getCell(rr,c);cell.font={name:'Times New Roman',size:14,bold:true};cell.alignment=center;cell.border=border;cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFFFFF'}};}
+    ws.getRow(dayRow).height=33; ws.getRow(dateRow).height=39.75; r=blankRow+1;
+    const rowCount=Math.max(classes.length,5);
+    for(let i=0;i<rowCount;i++){
+      const cls=classes[i]||'';
+      const examLists=dates.map(dt=>{
+        if(!cls) return [];
+        return mode==='merge'?mergedClassExams(block,cls).filter(e=>e.sess.date===dt):block.exams.filter(e=>(e.c.section||e.c.className||e.c.program||'Class')===cls&&e.sess.date===dt);
+      });
+      const maxBlocks=Math.max(1,...examLists.map(a=>a.length));
+      const startClassRow=r, endClassRow=r+maxBlocks-1;
+      if(cls){
+        ws.getCell(r,1).value=cls;
+        ws.getCell(r,1).font={name:'Times New Roman',size:14,bold:true};
+        ws.getCell(r,1).alignment=center;
+        ws.getCell(r,1).border={top:thin,bottom:thin,left:thin,right:thin};
+        if(maxBlocks>1) ws.mergeCells(startClassRow,1,endClassRow,1);
+      } else {
+        ws.getCell(r,1).border=border;
+      }
+      for(let k=0;k<maxBlocks;k++){
+        const rr=r+k;
+        let rowHeight=30;
+        dates.forEach((dt,j)=>{
+          const ex=examLists[j][k]||null;
+          const cell=ws.getCell(rr,2+j);
+          cell.value=dateSheetCourseText(ex);
+          cell.font={name:'Times New Roman',size:14};
+          cell.alignment=center;
+          cell.border={top:thin,bottom:thin,left:thin,right:thin};
+          if(ex) rowHeight=Math.max(rowHeight,90);
+          // The border between courses is the separator line; no placeholder symbols.
+          if(ex && k < examLists[j].length-1){
+            cell.border={top:thin,bottom:thin,left:thin,right:thin};
+          }
+        });
+        ws.getRow(rr).height=cls?rowHeight:30;
+      }
+      r=endClassRow+1;
+    }
+    // Keep the reference's whitespace before approvals without creating extra
+    // bordered/visible report rows.
+    while(r<startRow+20) { ws.getRow(r).height=18; r++; }
+    // All four signatories sit on one row, each with a top-border line drawn
+    // directly above its designation name.
+    const sigRow=r;
+    const sigCols=[1, Math.min(4,maxCol), Math.min(7,maxCol), Math.min(10,maxCol)];
+    const sigLabels=['Assistant Controller of Examination', mode==='merge'?'HOD':`HOD (${report.label})`, 'Dean', 'Controller of Examinations'];
+    sigCols.forEach((col,i)=>{
+      const cell=ws.getCell(sigRow,col);
+      cell.value=sigLabels[i];
+      cell.font={name:'Times New Roman',size:20,bold:true};
+      cell.alignment=center;
+      cell.border={top:thin};
+    });
+    ws.getRow(sigRow).height=30;
+    r=sigRow+1;
+    // Match reference column widths.
+    const refWidths=[22.5,43.85546875,36.140625,40.85546875,41.5,42.35546875,41.640625,40,41.140625,44,35,45.85546875];
+    for(let c=1;c<=maxCol;c++) ws.getColumn(c).width=refWidths[c-1]||40;
+    return r+10;
+  };
+  valid.forEach(report=>{
+    const name=(state.timetableReportMode==='merge'?'Department - ':'')+report.label;
+    const ws=wb.addWorksheet(String(name).slice(0,31),{pageSetup:{orientation:'landscape',paperSize:9,fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:0.2,right:0.2,top:0.35,bottom:0.35,header:0.1,footer:0.1}}});
+    ws.properties.defaultRowHeight=18; let r=1;
+    report.blocks.forEach((block,idx)=>{ if(idx>0){r+=3;} r=addReport(ws,report,block,r); if(idx<report.blocks.length-1) ws.addPageBreak(r-1); });
+    ws.printArea=`A1:${String.fromCharCode(64+Math.min(ws.columnCount,26))}${Math.max(1,ws.rowCount)}`; ws.headerFooter.oddFooter='&CPage &P of &N';
+  });
+  wb.xlsx.writeBuffer().then(buffer=>{const blob=new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='timetable-program-wise-dsu-final-date-sheet.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast(`Downloaded exact DSU-format timetable -- ${valid.length} report sheet(s)`,'ok');});
+}
+function xlsxTimetableDay(){
+  const dates = [...new Set(state.sessions.map(s=>s.date))].sort();
+  const sheets = {};
+  dates.forEach(date=>{
+    const rows = [];
+    state.sessions.filter(s=>s.date===date).sort((a,b)=>(a.startTime||'').localeCompare(b.startTime||'')).forEach(sess=>{
+      state.scheduled.filter(sc=>sc.sessionId===sess.id).forEach(sc=>{
+        const c = state.courses.find(x=>x.id===sc.courseId);
+        if(c) rows.push({Session:sess.label, Time:`${sess.startTime}-${sess.endTime}`, Course:c.code, Title:c.title, Section:c.section, Faculty:c.faculty});
+      });
+    });
+    if(rows.length) sheets[date||'Date'] = rows;
+  });
+  xlsxDownload(sheets, 'timetable-day-wise.xlsx');
+}
+function xlsxStudentPapers(){
+  const selectedPrograms = new Set(selectedTimetablePrograms());
+  const rows = [...state.students].filter(st=>st.courseIds && st.courseIds.length)
+    .sort((a,b)=>a.rollNo.localeCompare(b.rollNo)).flatMap(st=>{
+      return st.courseIds.map(cid=>{
+        const c = state.courses.find(x=>x.id===cid); if(!c) return null;
+        // Only include papers belonging to a program currently ticked in
+        // Timetable -- Program-wise (DSU Final Date Sheet); keeps this report
+        // scoped to the same department/program selection as that report.
+        if(selectedPrograms.size && !selectedPrograms.has(c.program)) return null;
+        const sc = state.scheduled.find(x=>x.courseId===cid);
+        const sess = sc ? state.sessions.find(x=>x.id===sc.sessionId) : null;
+        const seat = state.seating.find(x=>x.studentId===st.id && x.courseId===cid);
+        const room = seat ? state.rooms.find(r=>r.id===seat.roomId) : null;
+        // Sort key for chronological ordering; unscheduled papers sort to the end.
+        const sortKey = sess ? `${sess.date||''}|${sess.startTime||''}` : '9999-99-99|99:99';
+        return { sortKey, row: {
+          'Roll No':st.rollNo, 'Name':st.name, 'Program':st.program||'', 'Section':st.section||'',
+          'Course':c.code, 'Subject Name':c.title, 'Date':sess?sess.date:'', 'Time':sess?`${sess.startTime}-${sess.endTime}`:'',
+          'Room':room?room.name:'', 'Row':seat?seat.row:'', 'Column':seat?seat.col:''
+        }};
+      }).filter(Boolean)
+      .sort((a,b)=>a.sortKey.localeCompare(b.sortKey))
+      .map(x=>x.row);
+    });
+  if(!rows.length){ toast(selectedPrograms.size ? 'No students match the selected department/program(s) in Timetable -- Program-wise' : 'No student paper data yet','warn'); return; }
+  xlsxDownload({'Student Timetables':rows}, 'student-individual-timetables.xlsx');
+}
+function xlsxDaily(){
+  const rows = [];
+  const dates = [...new Set(state.sessions.map(s=>s.date))].sort();
+  dates.forEach(date=>{
+    state.sessions.filter(s=>s.date===date).sort((a,b)=>(a.startTime||'').localeCompare(b.startTime||'')).forEach(sess=>{
+      state.scheduled.filter(sc=>sc.sessionId===sess.id).forEach(sc=>{
+        const c = state.courses.find(x=>x.id===sc.courseId); if(!c) return;
+        const rooms = [...new Set(state.seating.filter(s=>s.sessionId===sess.id&&s.courseId===sc.courseId).map(s=>state.rooms.find(r=>r.id===s.roomId)?.name))].filter(Boolean).join(', ');
+        rows.push({Date:date, Time:`${sess.startTime}-${sess.endTime}`, Course:c.code, Title:c.title, Section:c.section, Faculty:c.faculty, Rooms:rooms||'--'});
+      });
+    });
+  });
+  xlsxDownload({'Daily Schedule':rows}, 'daily-class-schedule.xlsx');
+}
+function xlsxSeatingGrid(){
+  const sheets = {};
+  const sessionsSorted = [...state.sessions].sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.startTime||'').localeCompare(b.startTime||''));
+  for(const sess of sessionsSorted){
+    const seats = state.seating.filter(s=>s.sessionId===sess.id);
+    if(!seats.length) continue;
+    const roomIds = [...new Set(seats.map(s=>s.roomId))];
+    for(const rid of roomIds){
+      const room = state.rooms.find(r=>r.id===rid); if(!room) continue;
+      const rs = seats.filter(s=>s.roomId===rid);
+      const rows = [];
+      for(let r=1;r<=room.rows;r++){
+        const row = {'R\\C':`R${r}`};
+        for(let c=1;c<=room.cols;c++){
+          const seat = rs.find(s=>s.row===r&&s.col===c);
+          if(!seat){ row[`C${c}`]='--'; continue; }
+          const stu = state.students.find(x=>x.id===seat.studentId); const cc = state.courses.find(x=>x.id===seat.courseId);
+          row[`C${c}`] = `${stu?stu.rollNo:seat.studentId.slice(-4)} / ${cc?cc.code:''}`;
+        }
+        rows.push(row);
+      }
+      sheets[`${room.name} ${sess.date}`.slice(0,31)] = rows;
+    }
+  }
+  xlsxDownload(sheets, 'seating-plan-grid.xlsx');
+}
+function xlsxFaculty(){
+  const sheets = {};
+  const sessionsSorted = [...state.sessions].sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.startTime||'').localeCompare(b.startTime||''));
+  sessionsSorted.forEach(sess=>{
+    const exs = state.scheduled.filter(s=>s.sessionId===sess.id);
+    if(!exs.length) return;
+    const rows = exs.map(s=>{ const c=state.courses.find(x=>x.id===s.courseId); return c?{Faculty:c.faculty||'--', Course:c.code, Title:c.title, Section:c.section, Students:c.studentCount}:null; }).filter(Boolean);
+    if(rows.length) sheets[`${sess.label} ${sess.date}`.slice(0,31)] = rows;
+  });
+  xlsxDownload(sheets, 'faculty-duty.xlsx');
+}
+
+/* ================= PDF EXPORTS — Timetable / Seating / Faculty reports ================= */
+// Shared top header used by the five report PDFs below, mirroring the style
+// already used by pdfCourseWiseSeating so every "Reports" tab PDF looks consistent.
+function pdfReportHeader(doc, title, subtitle){
+  const pw = doc.internal.pageSize.getWidth();
+  doc.setTextColor(0,0,0);
+  doc.setFont('helvetica','bold').setFontSize(13);
+  doc.text(state.uniName || 'DHA SUFFA UNIVERSITY', pw/2, 34, {align:'center'});
+  doc.setFont('helvetica','normal').setFontSize(10);
+  doc.text(reportExamTitle(), pw/2, 49, {align:'center'});
+  doc.setFont('helvetica','bold').setFontSize(11);
+  doc.text(title, pw/2, 64, {align:'center'});
+  if(subtitle){
+    doc.setFont('helvetica','normal').setFontSize(9);
+    doc.text(subtitle, pw/2, 77, {align:'center'});
+  }
+  doc.setDrawColor(30,64,175).setLineWidth(1);
+  doc.line(40, (subtitle?84:71), pw-40, (subtitle?84:71));
+  return subtitle?96:83;
+}
+function pdfTimetableDay(){
+  const dates = [...new Set(state.sessions.map(s=>s.date))].sort();
+  if(!dates.length){ toast('No scheduled exams yet -- run Auto Schedule first','warn'); return; }
+  const doc = new jsPDF({unit:'pt',format:'a4',orientation:'landscape'});
+  let page = 0;
+  dates.forEach(date=>{
+    const rows = [];
+    state.sessions.filter(s=>s.date===date).sort((a,b)=>(a.startTime||'').localeCompare(b.startTime||'')).forEach(sess=>{
+      state.scheduled.filter(sc=>sc.sessionId===sess.id).forEach(sc=>{
+        const c = state.courses.find(x=>x.id===sc.courseId);
+        if(c) rows.push([sess.label||'--', `${sess.startTime||''}-${sess.endTime||''}`, c.code||'', c.title||'', c.section||'', c.faculty||'']);
+      });
+    });
+    if(!rows.length) return;
+    if(page++) doc.addPage();
+    const y = pdfReportHeader(doc, 'DAY-WISE EXAMINATION TIMETABLE', `${dayName(date)}, ${formatDateSheetDate(date)}`);
+    doc.autoTable({
+      head:[['Session','Time','Course','Title','Section','Faculty']],
+      body:rows, startY:y,
+      styles:{font:'helvetica',fontSize:9,cellPadding:4,textColor:[0,0,0],lineColor:[0,0,0],lineWidth:.4},
+      headStyles:{fillColor:[30,64,175],textColor:255,fontStyle:'bold'},
+      margin:{left:40,right:40,bottom:30}
+    });
+  });
+  if(!page){ toast('No scheduled exams yet -- run Auto Schedule first','warn'); return; }
+  doc.save('timetable-day-wise.pdf');
+  toast(`Downloaded Day-wise Timetable PDF -- ${dates.length} day(s)`,'ok');
+}
+function pdfStudentPapers(){
+  const selectedPrograms = new Set(selectedTimetablePrograms());
+  const rows = [...state.students].filter(st=>st.courseIds && st.courseIds.length)
+    .sort((a,b)=>a.rollNo.localeCompare(b.rollNo)).flatMap(st=>{
+      return st.courseIds.map(cid=>{
+        const c = state.courses.find(x=>x.id===cid); if(!c) return null;
+        // Only include this student's papers that belong to a program currently
+        // selected/ticked in Timetable -- Program-wise (DSU Final Date Sheet).
+        // Selecting fewer departments there narrows this report the same way.
+        if(selectedPrograms.size && !selectedPrograms.has(c.program)) return null;
+        const sc = state.scheduled.find(x=>x.courseId===cid);
+        const sess = sc ? state.sessions.find(x=>x.id===sc.sessionId) : null;
+        const seat = state.seating.find(x=>x.studentId===st.id && x.courseId===cid);
+        const room = seat ? state.rooms.find(r=>r.id===seat.roomId) : null;
+        const sortKey = sess ? `${sess.date||''}|${sess.startTime||''}` : '9999-99-99|99:99';
+        return { sortKey, row: [
+          st.rollNo, st.name, st.program||'', st.section||'',
+          c.code||'', c.title||'', sess?formatDateSheetDate(sess.date):'', sess?`${sess.startTime}-${sess.endTime}`:'',
+          room?room.name:'', seat?`Row ${seat.row}`:'', seat?`Col ${seat.col}`:''
+        ]};
+      }).filter(Boolean).sort((a,b)=>a.sortKey.localeCompare(b.sortKey)).map(x=>x.row);
+    });
+  if(!rows.length){ toast(selectedPrograms.size ? 'No students match the selected department/program(s) in Timetable -- Program-wise' : 'No student paper data yet -- run Auto Schedule and Generate Seating first','warn'); return; }
+  const doc = new jsPDF({unit:'pt',format:'a4',orientation:'landscape'});
+  const y = pdfReportHeader(doc, 'STUDENT INDIVIDUAL TIMETABLES', excelDepartmentHeaderLabel());
+  doc.autoTable({
+    head:[['Roll No','Name','Program','Section','Course','Subject Name','Date','Time','Room','Row','Column']],
+    body:rows, startY:y,
+    styles:{font:'helvetica',fontSize:7.5,cellPadding:3,textColor:[0,0,0],lineColor:[0,0,0],lineWidth:.35,overflow:'linebreak'},
+    headStyles:{fillColor:[30,64,175],textColor:255,fontStyle:'bold'},
+    margin:{left:24,right:24,bottom:30},
+    showHead:'everyPage'
+  });
+  doc.save('student-individual-timetables.pdf');
+  toast(`Downloaded Student Individual Timetables PDF -- ${rows.length} paper row(s)`,'ok');
+}
+// Admit-card style export: one full page per student (portrait A4) with a
+// bordered student-info box up top (roll no / name / program / section),
+// then a table of that student's own exams (date, time, room, seat), then
+// a 2-way signature line (Student / Controller of Examination) at the foot
+// of the page. Mirrors pdfStudentPapers' filtering (program tag selection)
+// but renders per-student pages instead of one shared table.
+function pdfStudentAdmitCards(){
+  const selectedPrograms = new Set(selectedTimetablePrograms());
+  const students = [...state.students].filter(st=>st.courseIds && st.courseIds.length)
+    .sort((a,b)=>a.rollNo.localeCompare(b.rollNo));
+  const doc = new jsPDF({unit:'pt',format:'a4',orientation:'portrait'});
+  let page = 0;
+  students.forEach(st=>{
+    const papers = st.courseIds.map(cid=>{
+      const c = state.courses.find(x=>x.id===cid); if(!c) return null;
+      if(selectedPrograms.size && !selectedPrograms.has(c.program)) return null;
+      const sc = state.scheduled.find(x=>x.courseId===cid);
+      const sess = sc ? state.sessions.find(x=>x.id===sc.sessionId) : null;
+      const seat = state.seating.find(x=>x.studentId===st.id && x.courseId===cid);
+      const room = seat ? state.rooms.find(r=>r.id===seat.roomId) : null;
+      const sortKey = sess ? `${sess.date||''}|${sess.startTime||''}` : '9999-99-99|99:99';
+      return { sortKey, row:[
+        c.code||'', c.title||'',
+        sess?`${dayName(sess.date)}, ${formatDateSheetDate(sess.date)}`:'--',
+        sess?`${sess.startTime||''}-${sess.endTime||''}`:'--',
+        room?room.name:'--', seat?`Row ${seat.row}, Col ${seat.col}`:'--'
+      ]};
+    }).filter(Boolean).sort((a,b)=>a.sortKey.localeCompare(b.sortKey)).map(x=>x.row);
+    if(!papers.length) return;
+    if(page++) doc.addPage();
+    const pw = doc.internal.pageSize.getWidth();
+    const y0 = pdfReportHeader(doc, 'EXAMINATION ADMIT CARD', st.program || '');
+
+    // Bordered student-info box
+    const boxX=40, boxY=y0+6, boxW=pw-80, boxH=72;
+    doc.setDrawColor(30,64,175).setLineWidth(1);
+    doc.rect(boxX, boxY, boxW, boxH);
+    doc.setDrawColor(226,232,240).setLineWidth(0.5);
+    doc.line(boxX, boxY+boxH/2, boxX+boxW, boxY+boxH/2);
+    doc.line(boxX+boxW/2, boxY, boxX+boxW/2, boxY+boxH);
+    doc.setTextColor(0,0,0);
+    const col1X=boxX+14, col2X=boxX+boxW/2+14, r1Y=boxY+boxH/4+3, r2Y=boxY+boxH*3/4+3;
+    const field=(x,y,label,val)=>{
+      doc.setFont('helvetica','bold').setFontSize(9);
+      doc.text(label, x, y);
+      doc.setFont('helvetica','normal').setFontSize(10);
+      doc.text(String(val||'--'), x, y+13);
+    };
+    field(col1X, r1Y-6, 'ROLL NO', st.rollNo);
+    field(col2X, r1Y-6, 'PROGRAM', st.program);
+    field(col1X, r2Y-6, 'NAME', st.name);
+    field(col2X, r2Y-6, 'SECTION', st.section);
+
+    doc.autoTable({
+      head:[['Course','Subject Name','Date','Time','Room','Seat']],
+      body: papers, startY: boxY+boxH+18,
+      styles:{font:'helvetica',fontSize:9,cellPadding:5.5,textColor:[0,0,0],lineColor:[0,0,0],lineWidth:.4,overflow:'linebreak'},
+      headStyles:{fillColor:[30,64,175],textColor:255,fontStyle:'bold'},
+      margin:{left:40,right:40}
+    });
+
+    const noteY = doc.lastAutoTable.finalY + 22;
+    doc.setFont('helvetica','italic').setFontSize(8.5).setTextColor(90,90,90);
+    doc.text('This admit card must be presented, along with a valid university ID card, at every examination listed above.', 40, noteY, {maxWidth: pw-80});
+    doc.setTextColor(0,0,0);
+
+    // 2-way signature line at the foot of the page (Student / Controller)
+    const ph = doc.internal.pageSize.getHeight();
+    const sy = ph - 60, labelY = sy + 14, margin2 = 50, lineW = 150;
+    const leftX = margin2, rightX = pw - margin2 - lineW;
+    doc.setDrawColor(60,60,60).setLineWidth(0.75);
+    [[leftX,'Student Signature'],[rightX,'Controller of Examination']].forEach(([x,label])=>{
+      doc.line(x, sy, x + lineW, sy);
+      doc.setFont('helvetica','normal').setFontSize(9).setTextColor(40,40,40);
+      doc.text(label, x + lineW/2, labelY, {align:'center'});
+    });
+    doc.setTextColor(0,0,0);
+  });
+  if(!page){ toast(selectedPrograms.size ? 'No students match the selected department/program(s) in Timetable -- Program-wise' : 'No student paper data yet -- run Auto Schedule and Generate Seating first','warn'); return; }
+  doc.save('student-admit-cards.pdf');
+  toast(`Downloaded Student Admit Cards PDF -- ${page} student page(s)`,'ok');
+}
+function pdfDaily(){
+  const rows = [];
+  const dates = [...new Set(state.sessions.map(s=>s.date))].sort();
+  dates.forEach(date=>{
+    state.sessions.filter(s=>s.date===date).sort((a,b)=>(a.startTime||'').localeCompare(b.startTime||'')).forEach(sess=>{
+      state.scheduled.filter(sc=>sc.sessionId===sess.id).forEach(sc=>{
+        const c = state.courses.find(x=>x.id===sc.courseId); if(!c) return;
+        const roomNames = [...new Set(state.seating.filter(s=>s.sessionId===sess.id&&s.courseId===sc.courseId).map(s=>state.rooms.find(r=>r.id===s.roomId)?.name))].filter(Boolean).join(', ');
+        rows.push([formatDateSheetDate(date), `${sess.startTime||''}-${sess.endTime||''}`, c.code||'', c.title||'', c.section||'', c.faculty||'', roomNames||'--']);
+      });
+    });
+  });
+  if(!rows.length){ toast('No scheduled exams yet -- run Auto Schedule first','warn'); return; }
+  const doc = new jsPDF({unit:'pt',format:'a4',orientation:'landscape'});
+  const y = pdfReportHeader(doc, 'DAILY CLASS SCHEDULE');
+  doc.autoTable({
+    head:[['Date','Time','Course','Title','Section','Faculty','Rooms']],
+    body:rows, startY:y,
+    styles:{font:'helvetica',fontSize:8.5,cellPadding:3.5,textColor:[0,0,0],lineColor:[0,0,0],lineWidth:.4,overflow:'linebreak'},
+    headStyles:{fillColor:[30,64,175],textColor:255,fontStyle:'bold'},
+    margin:{left:30,right:30,bottom:30},
+    showHead:'everyPage'
+  });
+  doc.save('daily-class-schedule.pdf');
+  toast(`Downloaded Daily Class Schedule PDF -- ${rows.length} row(s)`,'ok');
+}
+function pdfSeating(){
+  const sessionsSorted = [...state.sessions].sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.startTime||'').localeCompare(b.startTime||''));
+  const doc = new jsPDF({unit:'pt',format:'a4',orientation:'landscape'});
+  let page = 0;
+  for(const sess of sessionsSorted){
+    const seats = state.seating.filter(s=>s.sessionId===sess.id);
+    if(!seats.length) continue;
+    const roomIds = [...new Set(seats.map(s=>s.roomId))];
+    for(const rid of roomIds){
+      const room = state.rooms.find(r=>r.id===rid); if(!room) continue;
+      const rs = seats.filter(s=>s.roomId===rid);
+      const body = [];
+      for(let r=1;r<=room.rows;r++){
+        const row = [`R${r}`];
+        for(let c=1;c<=room.cols;c++){
+          const seat = rs.find(s=>s.row===r&&s.col===c);
+          if(!seat){ row.push('--'); continue; }
+          const stu = state.students.find(x=>x.id===seat.studentId); const cc = state.courses.find(x=>x.id===seat.courseId);
+          row.push(`${stu?stu.rollNo:seat.studentId.slice(-4)} / ${cc?cc.code:''}`);
+        }
+        body.push(row);
+      }
+      if(page++) doc.addPage();
+      const y = pdfReportHeader(doc, 'SEATING PLAN (ROOM GRID)', `${room.name} -- ${dayName(sess.date)}, ${formatDateSheetDate(sess.date)} (${sess.startTime||''}-${sess.endTime||''})`);
+      const head = ['R\\C', ...Array.from({length:room.cols},(_,i)=>`C${i+1}`)];
+      doc.autoTable({
+        head:[head], body, startY:y,
+        styles:{font:'helvetica',fontSize:6.5,cellPadding:2,halign:'center',valign:'middle',textColor:[0,0,0],lineColor:[0,0,0],lineWidth:.35,overflow:'linebreak'},
+        headStyles:{fillColor:[30,64,175],textColor:255,fontStyle:'bold',fontSize:7.5},
+        columnStyles:{0:{fontStyle:'bold',fillColor:[241,245,249]}},
+        margin:{left:24,right:24,bottom:30}
+      });
+    }
+  }
+  if(!page){ toast('No seating data yet -- run Generate Seating first','warn'); return; }
+  doc.save('seating-plan-grid.pdf');
+  toast(`Downloaded Seating Plan Grid PDF -- ${page} room/session page(s)`,'ok');
+}
+function pdfFaculty(){
+  const sessionsSorted = [...state.sessions].sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.startTime||'').localeCompare(b.startTime||''));
+  const doc = new jsPDF({unit:'pt',format:'a4',orientation:'landscape'});
+  let page = 0;
+  sessionsSorted.forEach(sess=>{
+    const exs = state.scheduled.filter(s=>s.sessionId===sess.id);
+    if(!exs.length) return;
+    const rows = exs.map(s=>{ const c=state.courses.find(x=>x.id===s.courseId); return c?[c.faculty||'--', c.code||'', c.title||'', c.section||'', c.studentCount||0]:null; }).filter(Boolean);
+    if(!rows.length) return;
+    if(page++) doc.addPage();
+    const y = pdfReportHeader(doc, 'FACULTY DUTY SHEET', `${sess.label||''} -- ${dayName(sess.date)}, ${formatDateSheetDate(sess.date)} (${sess.startTime||''}-${sess.endTime||''})`);
+    doc.autoTable({
+      head:[['Faculty','Course','Title','Section','Students']],
+      body:rows, startY:y,
+      styles:{font:'helvetica',fontSize:9,cellPadding:4,textColor:[0,0,0],lineColor:[0,0,0],lineWidth:.4},
+      headStyles:{fillColor:[30,64,175],textColor:255,fontStyle:'bold'},
+      columnStyles:{4:{halign:'center'}},
+      margin:{left:40,right:40,bottom:30}
+    });
+    let yy = doc.lastAutoTable.finalY + 30;
+    pdfSignatureBlock(doc);
+  });
+  if(!page){ toast('No scheduled exams yet -- run Auto Schedule first','warn'); return; }
+  doc.save('faculty-duty.pdf');
+  toast(`Downloaded Faculty Duty Sheet PDF -- ${page} session page(s)`,'ok');
+}
+
+// Coalesce many state changes into one paint. Uses idle time when the browser allows.
+let renderQueued = false;
+const _idle = window.requestIdleCallback || (cb=>setTimeout(()=>cb({timeRemaining:()=>16}),0));
+function safeRender(){
+  if(renderQueued) return;
+  renderQueued = true;
+  _idle(()=>requestAnimationFrame(()=>{
+    renderQueued = false;
+    render();
+  }));
+}
+
+// Debounced search-input renderer — avoids rebuilding huge tables on every keystroke.
+const _debTimers = new WeakMap();
+function debouncedRender(fn, delay=180){
+  const t = _debTimers.get(fn);
+  if(t) clearTimeout(t);
+  _debTimers.set(fn, setTimeout(()=>{ _debTimers.delete(fn); fn(); }, delay));
+}
+
+/* ================= INIT ================= */
+load();
+if(!state.rooms.length){ state.rooms = PRELOADED_ROOMS.map(r=>({...r,id:uid(),active:true})); }
+if(!state.sessions.length) preloadSessions('three');
+render();
+</script>
+</body>
+</html>
